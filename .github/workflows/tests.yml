@@ -42,5 +42,5 @@ jobs:
         working-directory: src
 
       - name: Run isort
-        run: isort --check-only .
+        run: isort --profile black --check-only .
         working-directory: src
