@@ -1,7 +1,7 @@
 import json
 
 from scripts import create_admin
-from src import auth
+from backend import auth
 
 
 def test_save_user_writes_expected_json_file(tmp_path, monkeypatch):
@@ -89,6 +89,59 @@ def test_create_user_returns_none_when_username_exists(tmp_path, monkeypatch):
     created = auth.create_user("frank", "another-secret")
 
     assert created is None
+
+
+def test_add_group_to_user_appends_group_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
+
+    with open(tmp_path / "user_1.json", "w", encoding="utf-8") as file:
+        json.dump(
+            {
+                "user_id": 1,
+                "username": "alice",
+                "salt": "aa",
+                "password_hash": "bb",
+                "is_admin": False,
+                "group_ids": [],
+            },
+            file,
+        )
+
+    added = auth.add_group_to_user("alice", 5)
+
+    assert added is True
+    updated_user = auth.load_user("alice")
+    assert updated_user is not None
+    assert 5 in updated_user["group_ids"]
+
+
+def test_add_group_to_user_returns_false_for_missing_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
+
+    added = auth.add_group_to_user("ghost", 2)
+
+    assert added is False
+
+
+def test_add_group_to_user_returns_false_when_group_already_present(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
+
+    with open(tmp_path / "user_1.json", "w", encoding="utf-8") as file:
+        json.dump(
+            {
+                "user_id": 1,
+                "username": "alice",
+                "salt": "aa",
+                "password_hash": "bb",
+                "is_admin": False,
+                "group_ids": [9],
+            },
+            file,
+        )
+
+    added = auth.add_group_to_user("alice", 9)
+
+    assert added is False
 
 
 def test_ensure_admin_user_resets_password_when_requested(tmp_path, monkeypatch):

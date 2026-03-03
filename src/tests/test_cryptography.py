@@ -1,6 +1,6 @@
 import os
 
-from src.cryptography_utils import hash_password, verify_password
+from backend.cryptography_utils import hash_password, verify_password
 
 
 def test_hash_password_returns_bytes_with_expected_length():

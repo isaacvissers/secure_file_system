@@ -11,8 +11,8 @@ SRC_DIR = CURRENT_DIR.parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from auth import USERS_DIR, create_user
-from cryptography_utils import hash_password
+from backend.auth import USERS_DIR, create_user
+from backend.cryptography_utils import hash_password
 
 UserDict = Dict[str, Any]
 

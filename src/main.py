@@ -1,8 +1,9 @@
 import cmd
 
-from auth import *
+from backend.auth import *
+from backend.group_utils import *
 from cli_utils import *
-from cryptography_utils import *
+from backend.cryptography_utils import *
 
 
 class SecureFS(cmd.Cmd):
@@ -63,6 +64,57 @@ class SecureFS(cmd.Cmd):
             return
 
         print(f"User created: {created_user['username']} ")
+
+    @requires_admin
+    def do_create_group(self, arg):
+        """
+        Usage: create_group
+        """
+        group_name = prompt_required_text("group name")
+        if group_name is None:
+            return
+
+        create_group(group_name)
+        print(f"Group created: {group_name}")
+
+    @requires_admin
+    def do_add_user_to_group(self, arg):
+        """
+        Usage: add_user_to_group
+        """
+        group_name = prompt_required_text("group name")
+        if group_name is None:
+            return
+
+        username = prompt_required_text("username")
+        if username is None:
+            return
+
+        user_data = load_user(username)
+        if user_data is None:
+            print(f"Error: User '{username}' does not exist.")
+            return
+
+        group_data = load_group(group_name)
+        if group_data is None:
+            print(f"Error: Group '{group_name}' does not exist.")
+            return
+
+        user_id = user_data["user_id"]
+        group_id = group_data["group_id"]
+
+        added_to_group = add_user_to_group(group_name, user_id)
+        if not added_to_group:
+            print(f"Failed to add user '{username}' to group '{group_name}'.")
+            return
+
+        added_to_user = add_group_to_user(username, group_id)
+        if added_to_user:
+            print(f"User '{username}' added to group '{group_name}'.")
+            return
+
+        remove_user_from_group(group_name, user_id)
+        print(f"Failed to add user '{username}' to group '{group_name}'.")
 
     def do_exit(self, arg):
         return True
