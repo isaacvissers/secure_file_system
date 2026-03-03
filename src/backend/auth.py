@@ -4,7 +4,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Tuple
 
-from backend.cryptography_utils import hash_password
+from backend.cryptography_utils import *
 from backend.group_utils import load_group, save_group
 
 SRC_DIR = Path(__file__).resolve().parents[1]
@@ -56,7 +56,12 @@ def requires_admin(func):
     @wraps(func)
     @requires_login
     def wrapper(self, arg):
-        if not self.current_user.get("is_admin", False):
+        current = self.current_user or {}
+        is_admin = current.get("is_admin", False)
+        if not is_admin and isinstance(current.get("user_data"), dict):
+            is_admin = current["user_data"].get("is_admin", False)
+
+        if not is_admin:
             print("Must be logged in as the Admin")
             return
         return func(self, arg)
@@ -96,27 +101,18 @@ def create_user(
 
     salt = os.urandom(SALT_BYTES)
     password_hash = hash_password(password.encode(), salt)
+    private_bytes, public_bytes = generate_rsa_keys()
+    encrypted_private_key, nonce = encrypt_private_key(private_bytes, salt, password.encode())
+
     user_dict = {
         "user_id": _next_user_id(),
         "username": username,
         "salt": salt.hex(),
         "password_hash": password_hash.hex(),
         "is_admin": is_admin,
-        "group_ids": [],
+        "public_key": public_bytes.hex(),
+        "encrypted_private_key": encrypted_private_key.hex(),
+        "private_key_nonce": nonce.hex()
     }
     save_user(user_dict)
     return user_dict
-
-def add_group_to_user(username: str, group_id: int) -> bool:
-    user = load_user(username)
-    if user is None:
-        print(f"User '{username}' does not exist.")
-        return False
-
-    if group_id in user["group_ids"]:
-        print(f"User '{username}' is already in group '{group_id}'.")
-        return False
-
-    user["group_ids"].append(group_id)
-    save_user(user)
-    return True

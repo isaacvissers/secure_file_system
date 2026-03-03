@@ -1,4 +1,62 @@
 import os
+import pytest
+from cryptography.hazmat.primitives import serialization
+
+from backend.cryptography_utils import (
+    generate_rsa_keys,
+    encrypt_private_key,
+    decrypt_private_key,
+)
+
+
+def test_generate_rsa_keys_returns_pem_bytes():
+    private_bytes, public_bytes = generate_rsa_keys()
+    assert isinstance(private_bytes, (bytes, bytearray))
+    assert isinstance(public_bytes, (bytes, bytearray))
+    # PEM files begin with these headers
+    assert private_bytes.startswith(b"-----BEGIN PRIVATE KEY-----")
+    assert public_bytes.startswith(b"-----BEGIN PUBLIC KEY-----")
+
+
+def test_encrypt_decrypt_private_key_round_trip():
+    private_bytes, public_bytes = generate_rsa_keys()
+    password = "s3cret-pass"
+    salt = os.urandom(16)
+
+    encrypted, nonce = encrypt_private_key(private_bytes, salt, password.encode())
+    assert isinstance(encrypted, (bytes, bytearray))
+    assert isinstance(nonce, (bytes, bytearray))
+
+    user_dict = {
+        "salt": salt.hex(),
+        "encrypted_private_key": encrypted.hex(),
+        "private_key_nonce": nonce.hex(),
+    }
+
+    recovered_priv = decrypt_private_key(user_dict, password)
+    # serialize recovered public key and compare to original public bytes
+    recovered_pub_bytes = recovered_priv.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    assert recovered_pub_bytes == public_bytes
+
+
+def test_decrypt_private_key_fails_with_wrong_password():
+    private_bytes, _ = generate_rsa_keys()
+    password = "correct"
+    salt = os.urandom(16)
+
+    encrypted, nonce = encrypt_private_key(private_bytes, salt, password.encode())
+    user_dict = {
+        "salt": salt.hex(),
+        "encrypted_private_key": encrypted.hex(),
+        "private_key_nonce": nonce.hex(),
+    }
+
+    with pytest.raises(Exception):
+        decrypt_private_key(user_dict, "incorrect")
+import os
 
 from backend.cryptography_utils import hash_password, verify_password
 

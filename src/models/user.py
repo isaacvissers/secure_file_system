@@ -7,7 +7,8 @@ class User:
     user_id: int
     username: str
     salt: bytes
-    pasword_hash: bytes
+    password_hash: bytes
     is_admin: bool
-    group_ids: List[int]
-
+    public_key: bytes
+    encrypted_private_key: bytes
+    private_key_nonce: bytes
