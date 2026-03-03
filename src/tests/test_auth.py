@@ -1,7 +1,7 @@
 import json
 
-from scripts import create_admin
 from backend import auth
+from scripts import create_admin
 
 
 def test_save_user_writes_expected_json_file(tmp_path, monkeypatch):

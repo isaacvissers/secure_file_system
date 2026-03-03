@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List
 
+
 @dataclass
 class Group:
     group_id: int

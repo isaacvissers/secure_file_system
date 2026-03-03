@@ -14,6 +14,7 @@ SALT_BYTES = 16
 
 UserDict = Dict[str, Any]
 
+
 def _iter_user_records() -> Iterator[Tuple[Path, UserDict]]:
     for file_path in USERS_DIR.glob("*.json"):
         with open(file_path, "r", encoding="utf-8") as file:
@@ -102,7 +103,9 @@ def create_user(
     salt = os.urandom(SALT_BYTES)
     password_hash = hash_password(password.encode(), salt)
     private_bytes, public_bytes = generate_rsa_keys()
-    encrypted_private_key, nonce = encrypt_private_key(private_bytes, salt, password.encode())
+    encrypted_private_key, nonce = encrypt_private_key(
+        private_bytes, salt, password.encode()
+    )
 
     user_dict = {
         "user_id": _next_user_id(),
@@ -112,7 +115,7 @@ def create_user(
         "is_admin": is_admin,
         "public_key": public_bytes.hex(),
         "encrypted_private_key": encrypted_private_key.hex(),
-        "private_key_nonce": nonce.hex()
+        "private_key_nonce": nonce.hex(),
     }
     save_user(user_dict)
     return user_dict

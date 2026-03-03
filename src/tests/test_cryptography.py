@@ -1,12 +1,10 @@
 import os
+
 import pytest
 from cryptography.hazmat.primitives import serialization
 
-from backend.cryptography_utils import (
-    generate_rsa_keys,
-    encrypt_private_key,
-    decrypt_private_key,
-)
+from backend.cryptography_utils import (decrypt_private_key,
+                                        encrypt_private_key, generate_rsa_keys)
 
 
 def test_generate_rsa_keys_returns_pem_bytes():
@@ -56,6 +54,8 @@ def test_decrypt_private_key_fails_with_wrong_password():
 
     with pytest.raises(Exception):
         decrypt_private_key(user_dict, "incorrect")
+
+
 import os
 
 from backend.cryptography_utils import hash_password, verify_password

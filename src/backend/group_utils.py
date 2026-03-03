@@ -9,6 +9,7 @@ GROUPS_DIR.mkdir(parents=True, exist_ok=True)
 
 GroupsDict = Dict[str, Any]
 
+
 def _iter_group_records() -> Iterator[Tuple[Path, GroupsDict]]:
     for file_path in GROUPS_DIR.glob("*.json"):
         with open(file_path, "r", encoding="utf-8") as file:
@@ -26,6 +27,7 @@ def _find_group_by_name(name: str) -> Optional[GroupsDict]:
             return group_data
     return None
 
+
 def _next_group_id() -> int:
     highest_group_id = 0
     for _, group_data in _iter_group_records():
@@ -34,15 +36,19 @@ def _next_group_id() -> int:
             highest_group_id = group_id
     return highest_group_id + 1
 
+
 def group_exists(name: str) -> bool:
     return _find_group_by_name(name) is not None
+
 
 def save_group(group_dict: GroupsDict) -> None:
     group_file = GROUPS_DIR / f"group_{group_dict['group_name']}.json"
     _write_group_file(group_file, group_dict)
 
+
 def load_group(name: str) -> Optional[GroupsDict]:
     return _find_group_by_name(name)
+
 
 def create_group(name: str) -> Optional[GroupsDict]:
     if group_exists(name):
@@ -53,10 +59,11 @@ def create_group(name: str) -> Optional[GroupsDict]:
         "group_id": _next_group_id(),
         "group_name": name,
         "members": [],
-        "file_access": []
+        "file_access": [],
     }
     save_group(group_dict)
     return group_dict
+
 
 def add_user_to_group(group_name: str, user_id: int) -> bool:
     group = load_group(group_name)

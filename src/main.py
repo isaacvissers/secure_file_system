@@ -2,9 +2,9 @@ import cmd
 
 from backend.auth import *
 from backend.auth import _iter_user_records
+from backend.cryptography_utils import *
 from backend.group_utils import *
 from cli_utils import *
-from backend.cryptography_utils import *
 
 
 class SecureFS(cmd.Cmd):
@@ -45,17 +45,14 @@ class SecureFS(cmd.Cmd):
         if not verify_password(password.encode(), salt, stored_hash):
             print("Error: Incorrect password.")
             return
-        
+
         try:
             private_key = decrypt_private_key(user_data, password)
         except Exception:
             print("Error: Failed to unlock private key.")
             return
 
-        self.current_user = {
-            "user_data": user_data,
-            "private_key": private_key
-        }
+        self.current_user = {"user_data": user_data, "private_key": private_key}
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
