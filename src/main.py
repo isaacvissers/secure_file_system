@@ -6,6 +6,7 @@ from backend.cryptography_utils import *
 from backend.files_utils import FILES_DIR
 from backend.group_utils import *
 from cli_utils import *
+from models.file import Directory
 
 
 class SecureFS(cmd.Cmd):
@@ -55,7 +56,7 @@ class SecureFS(cmd.Cmd):
             return
 
         self.current_user = {"user_data": user_data, "private_key": private_key}
-        self.current_working_directory = FILES_DIR / f"user_{user_data['user_id']}"
+        self.current_working_directory = FILES_DIR / user_data["username"]
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
@@ -74,7 +75,10 @@ class SecureFS(cmd.Cmd):
         """
         Usage: mkdir <directory_name>
         """
-        directory_name = prompt_required_text("directory name")
+        if arg.strip():
+            directory_name = arg.strip()
+        else:
+            directory_name = prompt_required_text("directory name")
         if directory_name is None:
             return
 
@@ -82,7 +86,7 @@ class SecureFS(cmd.Cmd):
         if directory_path.exists():
             print(f"Error: Directory '{directory_name}' already exists.")
             return
-        directory_path.mkdir(parents=True, exist_ok=False)
+        directory = Directory.create(self.current_working_directory, directory_name)
         print(f"Directory '{directory_name}' created.")
 
     @requires_admin
