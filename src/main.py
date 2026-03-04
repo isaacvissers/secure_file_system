@@ -11,6 +11,7 @@ class SecureFS(cmd.Cmd):
     def __init__(self):
         super().__init__()
         self.current_user = None
+        self.current_working_directory = None
         self._update_prompt()
 
     def _update_prompt(self):
@@ -53,6 +54,7 @@ class SecureFS(cmd.Cmd):
             return
 
         self.current_user = {"user_data": user_data, "private_key": private_key}
+        self.current_working_directory = f"user_{user_data['user_id']}"
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
@@ -62,6 +64,7 @@ class SecureFS(cmd.Cmd):
         Usage: logout
         """
         self.current_user = None
+        self.current_working_directory = None
         self._update_prompt()
         print(f"Log Out successful.")
 
