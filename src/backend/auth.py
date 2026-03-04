@@ -1,48 +1,24 @@
 import json
-import os
 from functools import wraps
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Dict, Optional
 
-from backend.cryptography_utils import *
 from backend.files_utils import create_user_directory
 from backend.group_utils import load_group, save_group
+from models.user import AdminUser, User
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"
 USERS_DIR.mkdir(parents=True, exist_ok=True)
-SALT_BYTES = 16
+ADMIN = "admin"
+SALT = "psalt"
 
 UserDict = Dict[str, Any]
 
 
-def _iter_user_records() -> Iterator[Tuple[Path, UserDict]]:
-    for file_path in USERS_DIR.glob("*.json"):
-        with open(file_path, "r", encoding="utf-8") as file:
-            yield file_path, json.load(file)
-
-
-def _write_user_file(file_path: Path, user_dict: UserDict) -> None:
-    with open(file_path, "w", encoding="utf-8") as file:
-        json.dump(user_dict, file)
-
-
-def _find_user_by_username(username: str) -> Optional[UserDict]:
-    for _, user_data in _iter_user_records():
-        if user_data.get("username") == username:
-            return user_data
-    return None
-
-
-def _next_user_id() -> int:
-    highest_user_id = 0
-    for _, user_data in _iter_user_records():
-        user_id = user_data.get("user_id", 0)
-        if isinstance(user_id, int) and user_id > highest_user_id:
-            highest_user_id = user_id
-    return highest_user_id + 1
-
-
+## --------------------
+# Auth Wrappers
+## --------------------
 def requires_login(func):
     @wraps(func)
     def wrapper(self, arg):
@@ -59,9 +35,7 @@ def requires_admin(func):
     @requires_login
     def wrapper(self, arg):
         current = self.current_user or {}
-        is_admin = current.get("is_admin", False)
-        if not is_admin and isinstance(current.get("user_data"), dict):
-            is_admin = current["user_data"].get("is_admin", False)
+        is_admin = isinstance(current, AdminUser)
 
         if not is_admin:
             print("Must be logged in as the Admin")
@@ -82,17 +56,68 @@ def requires_logged_out(func):
     return wrapper
 
 
-def user_exists(username: str) -> bool:
-    return _find_user_by_username(username) is not None
+## --------------------
+# User Management
+## --------------------
 
 
-def save_user(user_dict: UserDict) -> None:
-    user_file = USERS_DIR / f"user_{user_dict['user_id']}.json"
-    _write_user_file(user_file, user_dict)
+# TODO: ADD ENCRYPTION
+def create_user_key(username: str, password: str):
+    user_key = f"{username}_{password}_{SALT}"
+    return user_key
 
 
-def load_user(username: str) -> Optional[UserDict]:
-    return _find_user_by_username(username)
+def get_admin_key():
+    return create_user_key(ADMIN, ADMIN)
+
+
+def find_user_record_path(user_key: bytes) -> Optional[Path]:
+    pattern = "**/*"
+    if isinstance(user_key, bytes):
+        user_key = user_key.hex()
+    for p in USERS_DIR.glob(pattern):
+        if not p.is_file():
+            continue
+        if True and p.stem == user_key:
+            return p
+        if False and key in p.name:
+            return p
+    return None
+
+
+def find_admin_record_path(*, exact=True, recursive=True):
+    admin_key = get_admin_key()
+    return find_user_record_path(admin_key)
+
+
+# TODO: Add decryption
+def get_admin_record() -> Optional[AdminUser]:
+    admin_path = find_admin_record_path()
+    if not admin_path:
+        return None
+    with open(admin_path, "r", encoding="utf-8") as file:
+        admin_data = json.load(file)
+        return AdminUser(**admin_data)
+
+
+# TODO: Add decryption
+def get_user_record_by_username(username: str) -> Optional[User]:
+    admin = get_admin_record()
+    if not admin:
+        return None
+    user_key = admin.user_keys.get(username)
+    if not user_key:
+        print(f"User '{username}' not found in admin record.")
+        return None
+    user_path = find_user_record_path(user_key)
+    if not user_path:
+        print(f"User file for '{username}' not found at expected path: {user_path}")
+        return None
+    with open(user_path, "r", encoding="utf-8") as file:
+        user_data = json.load(file)
+        if "user_keys" in user_data:
+            return AdminUser(**user_data)
+        return User(**user_data)
 
 
 def create_user(
@@ -101,24 +126,72 @@ def create_user(
     if user_exists(username):
         return None
 
-    salt = os.urandom(SALT_BYTES)
-    password_hash = hash_password(password.encode(), salt)
-    private_bytes, public_bytes = generate_rsa_keys()
-    encrypted_private_key, nonce = encrypt_private_key(
-        private_bytes, salt, password.encode()
-    )
-
+    user_key = create_user_key(username, password)
     user_dict = {
-        "user_id": _next_user_id(),
         "username": username,
-        "salt": salt.hex(),
-        "password_hash": password_hash.hex(),
-        "is_admin": is_admin,
-        "public_key": public_bytes.hex(),
-        "encrypted_private_key": encrypted_private_key.hex(),
-        "private_key_nonce": nonce.hex(),
+        "file_keys": [],
+        "group_keys": [],
     }
-    save_user(user_dict)
+
     if not is_admin:
-        create_user_directory(user_dict["user_id"])
+        save_user(user_key, user_dict)
+        add_user_key_to_admin(username, user_key)
+        create_user_directory(user_key)
+    else:
+        user_dict["user_keys"] = {}
+        user_dict["group_keys"] = {}
+        save_user(user_key, user_dict)
+        add_user_key_to_admin(username, user_key)
     return user_dict
+
+
+def write_user_file(file_path: Path, user_dict: UserDict) -> None:
+    with open(file_path, "w", encoding="utf-8") as file:
+        json.dump(user_dict, file)
+
+
+def user_exists(username: str) -> bool:
+    return load_user(username) is not None
+
+
+def save_user(user_key: bytes, user_dict: UserDict) -> None:
+    user_file = USERS_DIR / f"{user_key}.json"
+    write_user_file(user_file, user_dict)
+
+
+def add_user_key_to_admin(username: str, user_key: bytes) -> None:
+    admin = get_admin_record()
+    if not admin:
+        print("Admin record not found. Cannot add user key.")
+        return
+
+    if getattr(admin, "user_keys", None) is None:
+        admin.user_keys = {}
+
+    admin.user_keys[username] = user_key
+    save_user(get_admin_key(), admin.__dict__)
+
+
+def load_user(username: str) -> Optional[UserDict]:
+    # Prefer admin index lookup (maps username -> user_key)
+    admin = get_admin_record()
+    if admin and getattr(admin, "user_keys", None):
+        user_key = admin.user_keys.get(username)
+        if user_key:
+            p = find_user_record_path(user_key)
+            if p:
+                try:
+                    with open(p, "r", encoding="utf-8") as fh:
+                        return json.load(fh)
+                except Exception:
+                    return None
+    # Fallback: scan all user files for a matching username field
+    for f in USERS_DIR.glob("*.json"):
+        try:
+            with open(f, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+        if data.get("username") == username:
+            return data
+    return None

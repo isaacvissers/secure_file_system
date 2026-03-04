@@ -1,6 +1,7 @@
 import pytest
 
 import main as main_module
+from backend.files_utils import FILES_DIR
 from main import SecureFS
 
 # ---------------------------------------------------------------------------
@@ -11,15 +12,10 @@ from main import SecureFS
 def _logged_in_shell():
     """Return a SecureFS instance that is already in a logged-in state."""
     shell = SecureFS()
-    shell.current_user = {
-        "user_data": {
-            "user_id": 1,
-            "username": "alice",
-            "is_admin": False,
-        },
-        "private_key": object(),
-    }
-    shell.current_working_directory = "user_1"
+    from types import SimpleNamespace
+
+    shell.current_user = SimpleNamespace(username="alice")
+    shell.current_working_directory = FILES_DIR / "user_1"
     shell._update_prompt()
     return shell
 
@@ -103,13 +99,18 @@ def test_logout_leaves_shell_usable_for_new_login(monkeypatch, capsys):
 
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("bob", "pass"))
     monkeypatch.setattr(main_module, "load_user", lambda username: new_user_data)
-    monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: True)
-    monkeypatch.setattr(main_module, "decrypt_private_key", lambda ud, pw: fake_key)
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        main_module,
+        "get_user_record_by_username",
+        lambda username: SimpleNamespace(username="bob"),
+    )
 
     shell.do_login("")
 
     assert shell.current_user is not None
-    assert shell.current_user["user_data"]["username"] == "bob"
+    assert getattr(shell.current_user, "username", None) == "bob"
     assert shell.prompt == "SFS/bob> "
 
 

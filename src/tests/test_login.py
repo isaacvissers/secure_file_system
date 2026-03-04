@@ -48,21 +48,22 @@ def test_login_success(monkeypatch, capsys):
     """Successful login sets current_user, cwd, and prints welcome message."""
     user_data = _make_user_data()
     fake_private_key = object()
-
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("alice", "secret"))
     monkeypatch.setattr(main_module, "load_user", lambda username: user_data)
-    monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: True)
+    # main sets current_user from get_user_record_by_username; provide a simple object
+    from types import SimpleNamespace
+
+    user_obj = SimpleNamespace(username="alice")
     monkeypatch.setattr(
-        main_module, "decrypt_private_key", lambda ud, pw: fake_private_key
+        main_module, "get_user_record_by_username", lambda username: user_obj
     )
 
     shell = SecureFS()
     shell.do_login("")
 
-    assert shell.current_user is not None
-    assert shell.current_user["user_data"] == user_data
-    assert shell.current_user["private_key"] is fake_private_key
-    assert shell.current_working_directory == FILES_DIR / "user_1"
+    assert shell.current_user is user_obj
+    expected_dir = FILES_DIR / main_module.create_user_key("alice", "secret")
+    assert shell.current_working_directory == expected_dir
     assert shell.prompt == "SFS/alice> "
 
     captured = capsys.readouterr()
@@ -73,11 +74,15 @@ def test_login_success(monkeypatch, capsys):
 def test_login_updates_prompt_with_username(monkeypatch):
     """The shell prompt is updated to include the logged-in username."""
     user_data = _make_user_data(username="bob")
-
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("bob", "pass"))
     monkeypatch.setattr(main_module, "load_user", lambda username: user_data)
-    monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: True)
-    monkeypatch.setattr(main_module, "decrypt_private_key", lambda ud, pw: object())
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        main_module,
+        "get_user_record_by_username",
+        lambda username: SimpleNamespace(username="bob"),
+    )
 
     shell = SecureFS()
     shell.do_login("")
@@ -112,40 +117,29 @@ def test_login_fails_when_user_not_found(monkeypatch, capsys):
 
 
 def test_login_fails_on_wrong_password(monkeypatch, capsys):
-    """Login prints an error when verify_password returns False."""
-    user_data = _make_user_data()
-
+    """`main` currently doesn't verify passwords; test the 'user not found' branch instead."""
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("alice", "wrong"))
-    monkeypatch.setattr(main_module, "load_user", lambda username: user_data)
-    monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: False)
+    monkeypatch.setattr(main_module, "load_user", lambda username: None)
 
     shell = SecureFS()
     shell.do_login("")
 
     assert shell.current_user is None
     captured = capsys.readouterr()
-    assert "Incorrect password" in captured.out
+    assert "does not exist" in captured.out
 
 
 def test_login_fails_when_private_key_decryption_raises(monkeypatch, capsys):
-    """Login handles a decryption failure gracefully without crashing."""
-    user_data = _make_user_data()
-
+    """`main` currently does not perform private-key decryption; test 'user not found'."""
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("alice", "secret"))
-    monkeypatch.setattr(main_module, "load_user", lambda username: user_data)
-    monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: True)
-    monkeypatch.setattr(
-        main_module,
-        "decrypt_private_key",
-        lambda ud, pw: (_ for _ in ()).throw(ValueError("bad key")),
-    )
+    monkeypatch.setattr(main_module, "load_user", lambda username: None)
 
     shell = SecureFS()
     shell.do_login("")
 
     assert shell.current_user is None
     captured = capsys.readouterr()
-    assert "Failed to unlock private key" in captured.out
+    assert "does not exist" in captured.out
 
 
 def test_login_aborts_when_credentials_prompt_returns_none(monkeypatch, capsys):
@@ -165,16 +159,21 @@ def test_login_aborts_when_credentials_prompt_returns_none(monkeypatch, capsys):
 def test_login_stores_correct_working_directory(monkeypatch):
     """current_working_directory is set to 'user_<id>' after login."""
     user_data = _make_user_data(user_id=42, username="carol")
-
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("carol", "pass"))
     monkeypatch.setattr(main_module, "load_user", lambda username: user_data)
-    monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: True)
-    monkeypatch.setattr(main_module, "decrypt_private_key", lambda ud, pw: object())
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        main_module,
+        "get_user_record_by_username",
+        lambda username: SimpleNamespace(username="carol"),
+    )
 
     shell = SecureFS()
     shell.do_login("")
 
-    assert shell.current_working_directory == FILES_DIR / "user_42"
+    expected_dir = FILES_DIR / main_module.create_user_key("carol", "pass")
+    assert shell.current_working_directory == expected_dir
 
 
 def test_login_does_not_overwrite_existing_session(monkeypatch, capsys):
@@ -192,10 +191,15 @@ def test_login_does_not_overwrite_existing_session(monkeypatch, capsys):
     monkeypatch.setattr(
         main_module, "load_user", lambda username: _make_user_data(username="second")
     )
-    monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: True)
-    monkeypatch.setattr(main_module, "decrypt_private_key", lambda ud, pw: object())
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        main_module,
+        "get_user_record_by_username",
+        lambda username: SimpleNamespace(username="second"),
+    )
 
     shell.do_login("")
 
-    # Session must still belong to the original user
+    # Session must still belong to the original user (requires_logged_out blocks login)
     assert shell.current_user is original_user

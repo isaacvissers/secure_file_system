@@ -1,7 +1,6 @@
 import cmd
 
 from backend.auth import *
-from backend.auth import _iter_user_records
 from backend.cryptography_utils import *
 from backend.files_utils import FILES_DIR
 from backend.group_utils import *
@@ -17,13 +16,25 @@ class SecureFS(cmd.Cmd):
 
     def _update_prompt(self):
         """Update the interactive prompt to include the logged-in username."""
-        if self.current_user and isinstance(self.current_user, dict):
-            user = self.current_user.get("user_data")
-            if user and isinstance(user, dict):
-                username = user.get("username")
-                if username:
-                    self.prompt = f"SFS/{username}> "
-                    return
+        if not self.current_user:
+            self.prompt = "SFS> "
+            return
+
+        # support both dataclass-like objects and the dict-shaped session
+        username = None
+        if isinstance(self.current_user, dict):
+            ud = self.current_user.get("user_data") or self.current_user
+            if isinstance(ud, dict):
+                username = ud.get("username")
+            else:
+                username = getattr(ud, "username", None)
+        else:
+            username = getattr(self.current_user, "username", None)
+
+        if isinstance(username, str):
+            self.prompt = f"SFS/{username}> "
+            return
+
         self.prompt = "SFS> "
 
     @requires_logged_out
@@ -41,21 +52,10 @@ class SecureFS(cmd.Cmd):
             print("Error: User does not exist.")
             return
 
-        salt = bytes.fromhex(user_data["salt"])
-        stored_hash = bytes.fromhex(user_data["password_hash"])
+        user_key = create_user_key(username, password)
 
-        if not verify_password(password.encode(), salt, stored_hash):
-            print("Error: Incorrect password.")
-            return
-
-        try:
-            private_key = decrypt_private_key(user_data, password)
-        except Exception:
-            print("Error: Failed to unlock private key.")
-            return
-
-        self.current_user = {"user_data": user_data, "private_key": private_key}
-        self.current_working_directory = FILES_DIR / f"user_{user_data['user_id']}"
+        self.current_user = get_user_record_by_username(username)
+        self.current_working_directory = FILES_DIR / user_key
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
@@ -100,92 +100,92 @@ class SecureFS(cmd.Cmd):
             print("Error: Username already exists.")
             return
 
-        print(f"User created: {created_user['username']} ")
+        print(f"User created: {username} ")
 
-    @requires_admin
-    def do_create_group(self, arg):
-        """
-        Usage: create_group
-        """
-        group_name = prompt_required_text("group name")
-        if group_name is None:
-            return
+    # @requires_admin
+    # def do_create_group(self, arg):
+    #     """
+    #     Usage: create_group
+    #     """
+    #     group_name = prompt_required_text("group name")
+    #     if group_name is None:
+    #         return
 
-        create_group(group_name)
-        print(f"Group created: {group_name}")
+    #     create_group(group_name)
+    #     print(f"Group created: {group_name}")
 
-    @requires_admin
-    def do_add_user_to_group(self, arg):
-        """
-        Usage: add_user_to_group
-        """
-        group_name = prompt_required_text("group name")
-        if group_name is None:
-            return
+    # @requires_admin
+    # def do_add_user_to_group(self, arg):
+    #     """
+    #     Usage: add_user_to_group
+    #     """
+    #     group_name = prompt_required_text("group name")
+    #     if group_name is None:
+    #         return
 
-        username = prompt_required_text("username")
-        if username is None:
-            return
+    #     username = prompt_required_text("username")
+    #     if username is None:
+    #         return
 
-        user_data = load_user(username)
-        if user_data is None:
-            print(f"Error: User '{username}' does not exist.")
-            return
+    #     user_data = load_user(username)
+    #     if user_data is None:
+    #         print(f"Error: User '{username}' does not exist.")
+    #         return
 
-        group_data = load_group(group_name)
-        if group_data is None:
-            print(f"Error: Group '{group_name}' does not exist.")
-            return
+    #     group_data = load_group(group_name)
+    #     if group_data is None:
+    #         print(f"Error: Group '{group_name}' does not exist.")
+    #         return
 
-        user_id = user_data["user_id"]
+    #     user_id = user_data["user_id"]
 
-        added_to_group = add_user_to_group(group_name, user_id)
-        if not added_to_group:
-            print(f"Failed to add user '{username}' to group '{group_name}'.")
-            return
+    #     added_to_group = add_user_to_group(group_name, user_id)
+    #     if not added_to_group:
+    #         print(f"Failed to add user '{username}' to group '{group_name}'.")
+    #         return
 
-        print(f"User '{username}' added to group '{group_name}'.")
+    #     print(f"User '{username}' added to group '{group_name}'.")
 
-    @requires_admin
-    def do_remove_user_from_group(self, arg):
-        """
-        Usage: remove_user_from_group
-        """
-        group_name = prompt_required_text("group name")
-        if group_name is None:
-            return
+    # @requires_admin
+    # def do_remove_user_from_group(self, arg):
+    #     """
+    #     Usage: remove_user_from_group
+    #     """
+    #     group_name = prompt_required_text("group name")
+    #     if group_name is None:
+    #         return
 
-        username = prompt_required_text("username")
-        if username is None:
-            return
+    #     username = prompt_required_text("username")
+    #     if username is None:
+    #         return
 
-        user_data = load_user(username)
-        if user_data is None:
-            print(f"Error: User '{username}' does not exist.")
-            return
+    #     user_data = load_user(username)
+    #     if user_data is None:
+    #         print(f"Error: User '{username}' does not exist.")
+    #         return
 
-        group_data = load_group(group_name)
-        if group_data is None:
-            print(f"Error: Group '{group_name}' does not exist.")
-            return
+    #     group_data = load_group(group_name)
+    #     if group_data is None:
+    #         print(f"Error: Group '{group_name}' does not exist.")
+    #         return
 
-        user_id = user_data["user_id"]
-        members = group_data.get("members", [])
-        if user_id not in members:
-            print(f"User '{username}' is not a member of group '{group_name}'.")
-            return
+    #     user_id = user_data["user_id"]
+    #     members = group_data.get("members", [])
+    #     if user_id not in members:
+    #         print(f"User '{username}' is not a member of group '{group_name}'.")
+    #         return
 
-        remove_user_from_group(group_name, user_id)
-        print(f"User '{username}' removed from group '{group_name}'.")
+    #     remove_user_from_group(group_name, user_id)
+    #     print(f"User '{username}' removed from group '{group_name}'.")
 
-    @requires_admin
-    def do_list_users(self, arg):
-        """
-        Usage: list_users
-        """
-        print("Users:")
-        for _, user_data in _iter_user_records():
-            print(f" - {user_data['username']} (ID: {user_data['user_id']})")
+    # @requires_admin
+    # def do_list_users(self, arg):
+    #     """
+    #     Usage: list_users
+    #     """
+    #     print("Users:")
+    #     for _, user_data in _iter_user_records():
+    #         print(f" - {user_data['username']} (ID: {user_data['user_id']})")
 
     def do_exit(self, arg):
         return True
