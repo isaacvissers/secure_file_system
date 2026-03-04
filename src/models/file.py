@@ -8,9 +8,11 @@ class Permission(Enum):
     GROUP = "group"
     ALL = "all"
 
+
 class FileType(Enum):
     FILE = "file"
     DIR = "dir"
+
 
 @dataclass
 class File:

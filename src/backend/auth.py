@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Tuple
 
 from backend.cryptography_utils import *
-from backend.group_utils import load_group, save_group
 from backend.files_utils import create_user_directory
+from backend.group_utils import load_group, save_group
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"

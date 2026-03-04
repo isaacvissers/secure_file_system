@@ -3,11 +3,8 @@ import os
 import pytest
 from cryptography.hazmat.primitives import serialization
 
-from backend.cryptography_utils import (
-    decrypt_private_key,
-    encrypt_private_key,
-    generate_rsa_keys,
-)
+from backend.cryptography_utils import (decrypt_private_key,
+                                        encrypt_private_key, generate_rsa_keys)
 
 
 def test_generate_rsa_keys_returns_pem_bytes():

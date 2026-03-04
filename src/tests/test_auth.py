@@ -1,8 +1,7 @@
 import json
 
-from backend import auth
+from backend import auth, files_utils
 from scripts import create_admin
-from backend import files_utils
 
 
 def test_save_user_writes_expected_json_file(tmp_path, monkeypatch):
@@ -116,19 +115,21 @@ def test_ensure_admin_user_resets_password_when_requested(tmp_path, monkeypatch)
     assert user_data["salt"] != "aa"
     assert user_data["password_hash"] != "bb"
 
+
 def test_create_user_creates_home_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
     monkeypatch.setattr(files_utils, "FILES_DIR", tmp_path)
-    
+
     user_dict = auth.create_user("tester", "password", is_admin=False)
 
     user_dir = tmp_path / f"user_{user_dict['user_id']}"
     assert user_dir.exists() and user_dir.is_dir()
-    
+
+
 def test_create_admin_doesnt_create_home_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
     monkeypatch.setattr(files_utils, "FILES_DIR", tmp_path)
-    
+
     user_dict = auth.create_user("tester", "password", is_admin=True)
 
     user_dir = tmp_path / f"user_{user_dict['user_id']}"
