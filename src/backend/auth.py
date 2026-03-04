@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterator, Optional, Tuple
 
 from backend.cryptography_utils import *
 from backend.group_utils import load_group, save_group
+from backend.files_utils import create_user_directory
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"
@@ -118,4 +119,6 @@ def create_user(
         "private_key_nonce": nonce.hex(),
     }
     save_user(user_dict)
+    if not is_admin:
+        create_user_directory(user_dict["user_id"])
     return user_dict
