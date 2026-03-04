@@ -82,6 +82,10 @@ class SecureFS(cmd.Cmd):
         if directory_name is None:
             print("Error: Directory name is required.")
             return
+        
+        if not self.current_working_directory.is_relative_to(FILES_DIR / self.current_user["user_data"]["username"]):
+            print("Error: Cannot create directories outside of your home directory.")
+            return
 
         try:
             directory = Directory.create(self.current_working_directory, directory_name)
@@ -100,6 +104,10 @@ class SecureFS(cmd.Cmd):
             file_name = prompt_required_text("file name")
         if file_name is None:
             print("Error: File name is required.")
+            return
+
+        if not self.current_working_directory.is_relative_to(FILES_DIR / self.current_user["user_data"]["username"]):
+            print("Error: Cannot create files outside of your home directory.")
             return
 
         try:
