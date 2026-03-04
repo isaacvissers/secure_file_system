@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from models.file import Directory, File, Permission
+from models.directory import Directory
+from models.file import File, Permission
 
 # ---------------------------------------------------------------------------
 # Directory.create()

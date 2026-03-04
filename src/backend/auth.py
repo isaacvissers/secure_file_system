@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterator, Optional, Tuple
 
 from backend.cryptography_utils import *
 from backend.group_utils import load_group, save_group
-from models.file import Directory
+from models.directory import Directory
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"
