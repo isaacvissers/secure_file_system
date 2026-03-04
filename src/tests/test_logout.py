@@ -1,6 +1,7 @@
 import pytest
 
 import main as main_module
+from backend.files_utils import FILES_DIR
 from main import SecureFS
 
 # ---------------------------------------------------------------------------
@@ -19,7 +20,7 @@ def _logged_in_shell():
         },
         "private_key": object(),
     }
-    shell.current_working_directory = "user_1"
+    shell.current_working_directory = FILES_DIR / "alice"
     shell._update_prompt()
     return shell
 

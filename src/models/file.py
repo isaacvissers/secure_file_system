@@ -24,6 +24,7 @@ class File:
     @classmethod
     def create(cls, working_dir: Path, name: str) -> "File":
         """Create the file on disk as <name>.json and return a File instance."""
+        # TODO: make sure we aren't creating files outside of the current user's directory
         path = working_dir / f"{name}.json"
         if path.exists():
             raise FileExistsError(f"{path} already exists")
@@ -62,9 +63,9 @@ class Directory:
     @classmethod
     def create(cls, working_dir: Path, name: str) -> "Directory":
         """Create the directory on disk and return a Directory instance."""
-
-        # Create metadata for new directory.
         metadata = File.create(working_dir, name)
         path = working_dir / name
+        if path.exists():
+            raise FileExistsError(f"{path} already exists")
         path.mkdir(parents=True, exist_ok=False)
         return cls(path=path, metadata=metadata)
