@@ -2,7 +2,6 @@ import json
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import List
 
 
 class Permission(Enum):
