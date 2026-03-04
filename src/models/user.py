@@ -1,14 +1,14 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 
 @dataclass
 class User:
-    user_id: int
     username: str
-    salt: bytes
-    password_hash: bytes
-    is_admin: bool
-    public_key: bytes
-    encrypted_private_key: bytes
-    private_key_nonce: bytes
+    file_keys: List[str]
+    group_keys: List[str]
+
+@dataclass
+class AdminUser(User):
+    user_keys: Dict[str, str]  # Maps encrypted usernames to keys
+    group_keys: Dict[str, str]  # Maps encrypted group names to keys

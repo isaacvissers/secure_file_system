@@ -1,10 +1,9 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 
 @dataclass
 class Group:
-    group_id: int
     group_name: str
-    members: List[str]
-    file_access: List[str]
+    members: Dict[str, str]  # List of encrypted usernames to their actual usernames
+    file_access: Dict[str, str]
