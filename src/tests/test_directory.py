@@ -1,18 +1,18 @@
+import json
+
 import pytest
 
-from models.file import Directory
+from models.file import Directory, File, Permission
+
+# ---------------------------------------------------------------------------
+# Directory.create()
+# ---------------------------------------------------------------------------
 
 
 def test_directory_create_returns_directory_instance(tmp_path):
     """Directory.create() returns a Directory object."""
     d = Directory.create(tmp_path, "mydir")
     assert isinstance(d, Directory)
-
-
-def test_directory_create_sets_file_name(tmp_path):
-    """Directory.create() sets file_name to the provided name."""
-    d = Directory.create(tmp_path, "mydir")
-    assert d.file_name == "mydir"
 
 
 def test_directory_create_sets_path(tmp_path):
@@ -32,3 +32,56 @@ def test_directory_create_raises_when_already_exists(tmp_path):
     (tmp_path / "exists").mkdir()
     with pytest.raises(OSError):
         Directory.create(tmp_path, "exists")
+
+
+# ---------------------------------------------------------------------------
+# Directory metadata (File)
+# ---------------------------------------------------------------------------
+
+
+def test_directory_create_attaches_metadata(tmp_path):
+    """Directory.create() attaches a File instance as metadata."""
+    d = Directory.create(tmp_path, "docs")
+    assert isinstance(d.metadata, File)
+
+
+def test_directory_metadata_file_name(tmp_path):
+    """Directory metadata records the directory name."""
+    d = Directory.create(tmp_path, "docs")
+    assert d.metadata.file_name == "docs"
+
+
+def test_directory_metadata_written_to_json(tmp_path):
+    """Directory.create() writes a JSON metadata file alongside the directory."""
+    Directory.create(tmp_path, "archive")
+    meta_file = tmp_path / "archive.json"
+    assert meta_file.exists()
+
+
+def test_directory_metadata_json_is_valid(tmp_path):
+    """The JSON metadata file contains valid JSON with expected keys."""
+    Directory.create(tmp_path, "archive")
+    data = json.loads((tmp_path / "archive.json").read_text())
+    for key in (
+        "file_name",
+        "owner_name",
+        "permission",
+        "encrypted_name",
+        "encrypted_body",
+        "encrypted_file_key",
+        "path",
+    ):
+        assert key in data
+
+
+def test_directory_metadata_file_name_in_json(tmp_path):
+    """The JSON metadata file_name matches the directory name."""
+    Directory.create(tmp_path, "archive")
+    data = json.loads((tmp_path / "archive.json").read_text())
+    assert data["file_name"] == "archive"
+
+
+def test_directory_metadata_permission_default(tmp_path):
+    """Default permission is USER."""
+    d = Directory.create(tmp_path, "priv")
+    assert d.metadata.permission == Permission.USER

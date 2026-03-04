@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Tuple
 
 from backend.cryptography_utils import *
-from backend.files_utils import create_user_directory
+from backend.files_utils import FILES_DIR, create_user_directory
 from backend.group_utils import load_group, save_group
 from models.file import Directory
 
@@ -121,5 +121,5 @@ def create_user(
     }
     save_user(user_dict)
     if not is_admin:
-        Directory.create(SRC_DIR / "storage/.files", user_dict["username"])
+        Directory.create(FILES_DIR, user_dict["username"])
     return user_dict

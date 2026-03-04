@@ -62,7 +62,7 @@ def test_login_success(monkeypatch, capsys):
     assert shell.current_user is not None
     assert shell.current_user["user_data"] == user_data
     assert shell.current_user["private_key"] is fake_private_key
-    assert shell.current_working_directory == FILES_DIR / "user_1"
+    assert shell.current_working_directory == FILES_DIR / "alice"
     assert shell.prompt == "SFS/alice> "
 
     captured = capsys.readouterr()
@@ -174,7 +174,7 @@ def test_login_stores_correct_working_directory(monkeypatch):
     shell = SecureFS()
     shell.do_login("")
 
-    assert shell.current_working_directory == FILES_DIR / "user_42"
+    assert shell.current_working_directory == FILES_DIR / "carol"
 
 
 def test_login_does_not_overwrite_existing_session(monkeypatch, capsys):
