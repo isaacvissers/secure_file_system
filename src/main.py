@@ -3,6 +3,7 @@ import cmd
 from backend.auth import *
 from backend.auth import _iter_user_records
 from backend.cryptography_utils import *
+from backend.files_utils import FILES_DIR
 from backend.group_utils import *
 from cli_utils import *
 
@@ -54,7 +55,7 @@ class SecureFS(cmd.Cmd):
             return
 
         self.current_user = {"user_data": user_data, "private_key": private_key}
-        self.current_working_directory = f"user_{user_data['user_id']}"
+        self.current_working_directory = FILES_DIR / f"user_{user_data['user_id']}"
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
@@ -67,6 +68,22 @@ class SecureFS(cmd.Cmd):
         self.current_working_directory = None
         self._update_prompt()
         print(f"Log Out successful.")
+
+    @requires_login
+    def do_mkdir(self, arg):
+        """
+        Usage: mkdir <directory_name>
+        """
+        directory_name = prompt_required_text("directory name")
+        if directory_name is None:
+            return
+
+        directory_path = self.current_working_directory / directory_name
+        if directory_path.exists():
+            print(f"Error: Directory '{directory_name}' already exists.")
+            return
+        directory_path.mkdir(parents=True, exist_ok=False)
+        print(f"Directory '{directory_name}' created.")
 
     @requires_admin
     def do_create_user(self, arg):

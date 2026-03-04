@@ -3,10 +3,10 @@ import pytest
 import main as main_module
 from main import SecureFS
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _logged_in_shell():
     """Return a SecureFS instance that is already in a logged-in state."""

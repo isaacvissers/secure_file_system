@@ -3,12 +3,13 @@ import io
 import pytest
 
 import main as main_module
+from backend.files_utils import FILES_DIR
 from main import SecureFS
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_user_data(
     user_id=1,
@@ -51,7 +52,9 @@ def test_login_success(monkeypatch, capsys):
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("alice", "secret"))
     monkeypatch.setattr(main_module, "load_user", lambda username: user_data)
     monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: True)
-    monkeypatch.setattr(main_module, "decrypt_private_key", lambda ud, pw: fake_private_key)
+    monkeypatch.setattr(
+        main_module, "decrypt_private_key", lambda ud, pw: fake_private_key
+    )
 
     shell = SecureFS()
     shell.do_login("")
@@ -59,7 +62,7 @@ def test_login_success(monkeypatch, capsys):
     assert shell.current_user is not None
     assert shell.current_user["user_data"] == user_data
     assert shell.current_user["private_key"] is fake_private_key
-    assert shell.current_working_directory == "user_1"
+    assert shell.current_working_directory == FILES_DIR / "user_1"
     assert shell.prompt == "SFS/alice> "
 
     captured = capsys.readouterr()
@@ -171,19 +174,24 @@ def test_login_stores_correct_working_directory(monkeypatch):
     shell = SecureFS()
     shell.do_login("")
 
-    assert shell.current_working_directory == "user_42"
+    assert shell.current_working_directory == FILES_DIR / "user_42"
 
 
 def test_login_does_not_overwrite_existing_session(monkeypatch, capsys):
     """A logged-in user cannot overwrite the session with a second login call."""
-    original_user = {"user_data": _make_user_data(username="first"), "private_key": object()}
+    original_user = {
+        "user_data": _make_user_data(username="first"),
+        "private_key": object(),
+    }
 
     shell = SecureFS()
     shell.current_user = original_user
 
     # Even if credentials would succeed, requires_logged_out should block this
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("second", "pw"))
-    monkeypatch.setattr(main_module, "load_user", lambda username: _make_user_data(username="second"))
+    monkeypatch.setattr(
+        main_module, "load_user", lambda username: _make_user_data(username="second")
+    )
     monkeypatch.setattr(main_module, "verify_password", lambda pw, salt, stored: True)
     monkeypatch.setattr(main_module, "decrypt_private_key", lambda ud, pw: object())
 
