@@ -3,7 +3,7 @@ import io
 import pytest
 
 import main as main_module
-from backend.files_utils import FILES_DIR
+from backend.auth import FILES_DIR
 from main import SecureFS
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import json
 
-from backend import auth, files_utils
+from backend import auth
 from scripts import create_admin
 
 

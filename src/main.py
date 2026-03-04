@@ -3,7 +3,7 @@ import cmd
 from backend.auth import *
 from backend.auth import _iter_user_records
 from backend.cryptography_utils import *
-from backend.files_utils import FILES_DIR
+from backend.auth import FILES_DIR
 from backend.group_utils import *
 from cli_utils import *
 from models.file import Directory, File
