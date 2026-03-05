@@ -199,14 +199,22 @@ class SecureFS(cmd.Cmd):
     #     remove_user_from_group(group_name, user_id)
     #     print(f"User '{username}' removed from group '{group_name}'.")
 
-    # @requires_admin
-    # def do_list_users(self, arg):
-    #     """
-    #     Usage: list_users
-    #     """
-    #     print("Users:")
-    #     for _, user_data in _iter_user_records():
-    #         print(f" - {user_data['username']} (ID: {user_data['user_id']})")
+    @requires_admin
+    def do_list_users(self, arg):
+        """
+        Usage: list_users
+        """
+        print("Users:")
+        admin = get_admin_record()
+        if not admin:
+            return
+
+        keys = getattr(admin, "user_keys", {}) or {}
+        for uname in keys:
+            user = load_user(uname)
+            if user is None:
+                continue
+            print(f" - {user.get('username')}")
 
     def do_exit(self, arg):
         return True
