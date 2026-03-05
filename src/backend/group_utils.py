@@ -146,3 +146,48 @@ def _add_group_to_user(user: dict, group_key: str):
 
     if group_key not in group_keys:
         group_keys.append(group_key)
+
+
+def remove_user_from_group(group_name: str, username: str) -> bool:
+    admin = auth.get_admin_record()
+    if not admin:
+        print("Admin record not found.")
+        return False
+
+    group_key = admin.group_keys.get(group_name)
+    if not group_key:
+        print(f"Group '{group_name}' not found.")
+        return False
+
+    user_key = admin.user_keys.get(username)
+    if not user_key:
+        print(f"User '{username}' not found.")
+        return False
+
+    group = load_group(group_name)
+    if not group:
+        print("Group file not found.")
+        return False
+
+    members = group.setdefault("members", {})
+    if username not in members:
+        print("User is not a member of the group.")
+        return False
+
+    # remove member from group
+    members.pop(username, None)
+
+    # remove group from user's group_keys
+    user = auth.load_user(username)
+    if user is None:
+        print("User file not found.")
+        return False
+
+    gkeys = user.setdefault("group_keys", [])
+    if group_key in gkeys:
+        gkeys.remove(group_key)
+
+    save_group(group_key, group)
+    auth.save_user(user_key, user)
+
+    return True

@@ -167,37 +167,40 @@ class SecureFS(cmd.Cmd):
 
         print(f"User '{username}' added to group '{group_name}'.")
 
-    # @requires_admin
-    # def do_remove_user_from_group(self, arg):
-    #     """
-    #     Usage: remove_user_from_group
-    #     """
-    #     group_name = prompt_required_text("group name")
-    #     if group_name is None:
-    #         return
+    @requires_admin
+    def do_remove_user_from_group(self, arg):
+        """
+        Usage: remove_user_from_group
+        """
+        group_name = prompt_required_text("group name")
+        if group_name is None:
+            return
 
-    #     username = prompt_required_text("username")
-    #     if username is None:
-    #         return
+        username = prompt_required_text("username")
+        if username is None:
+            return
 
-    #     user_data = load_user(username)
-    #     if user_data is None:
-    #         print(f"Error: User '{username}' does not exist.")
-    #         return
+        user_data = load_user(username)
+        if user_data is None:
+            print(f"Error: User '{username}' does not exist.")
+            return
 
-    #     group_data = load_group(group_name)
-    #     if group_data is None:
-    #         print(f"Error: Group '{group_name}' does not exist.")
-    #         return
+        group_data = load_group(group_name)
+        if group_data is None:
+            print(f"Error: Group '{group_name}' does not exist.")
+            return
 
-    #     user_id = user_data["user_id"]
-    #     members = group_data.get("members", [])
-    #     if user_id not in members:
-    #         print(f"User '{username}' is not a member of group '{group_name}'.")
-    #         return
+        members = group_data.get("members", {})
+        if username not in members:
+            print(f"User '{username}' is not a member of group '{group_name}'.")
+            return
 
-    #     remove_user_from_group(group_name, user_id)
-    #     print(f"User '{username}' removed from group '{group_name}'.")
+        removed = remove_user_from_group(group_name, username)
+        if not removed:
+            print(f"Failed to remove user '{username}' from group '{group_name}'.")
+            return
+
+        print(f"User '{username}' removed from group '{group_name}'.")
 
     @requires_admin
     def do_list_users(self, arg):
