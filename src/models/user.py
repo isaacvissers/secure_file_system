@@ -1,14 +1,19 @@
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import Dict, List
 
 
 @dataclass
 class User:
-    user_id: int
     username: str
-    salt: bytes
-    password_hash: bytes
-    is_admin: bool
-    public_key: bytes
-    encrypted_private_key: bytes
-    private_key_nonce: bytes
+    file_keys: List[str] = field(default_factory=list)
+    group_keys: List[str] = field(default_factory=list)
+
+
+@dataclass
+class AdminUser(User):
+    user_keys: Dict[str, str] = field(
+        default_factory=dict
+    )  # Maps encrypted usernames to keys
+    group_keys: Dict[str, str] = field(
+        default_factory=dict
+    )  # Maps encrypted group names to keys

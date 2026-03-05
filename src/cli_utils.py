@@ -25,6 +25,7 @@ def prompt_yes_no(label: str) -> bool:
         choice = input(f"{label} (y/n): ").strip().lower()
     return choice == "y"
 
+
 def prompt_credentials() -> Optional[Tuple[str, str]]:
     username = prompt_required_text("username")
     if username is None:
