@@ -47,15 +47,36 @@ class SecureFS(cmd.Cmd):
             return
         username, password = credentials
 
-        user_data = load_user(username)
-        if not user_data:
-            print("Error: User does not exist.")
+        admin = get_admin_record()
+        if not admin:
+            print("Error: Admin record missing.")
             return
 
-        user_key = create_user_key(username, password)
+        if username == ADMIN:
+            # Use the AdminUser object for admin login
+            expected_key = auth.create_user_key(username, password)
+            admin_key = auth.get_admin_key()
+            if expected_key != admin_key:
+                print("Error: Incorrect password.")
+                return
+            self.current_user = admin
+            # set working directory for admin session
+            self.current_working_directory = FILES_DIR / username
+        else:
+            user_key, user_dict = auth._resolve_user(admin, username)
+            if not user_dict:
+                print(f"Error: User '{username}' does not exist.")
+                return
 
-        self.current_user = get_user_record_by_username(username)
-        self.current_working_directory = FILES_DIR / user_key
+            expected_key = auth.create_user_key(username, password)
+            if user_key != expected_key:
+                print("Error: Incorrect password.")
+                return
+
+            self.current_user = user_dict
+            # set working directory to the user's files directory
+            self.current_working_directory = FILES_DIR / username
+
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
@@ -102,49 +123,49 @@ class SecureFS(cmd.Cmd):
 
         print(f"User created: {username} ")
 
-    # @requires_admin
-    # def do_create_group(self, arg):
-    #     """
-    #     Usage: create_group
-    #     """
-    #     group_name = prompt_required_text("group name")
-    #     if group_name is None:
-    #         return
+    @requires_admin
+    def do_create_group(self, arg):
+        """
+        Usage: create_group
+        """
+        group_name = prompt_required_text("group name")
+        if group_name is None:
+            return
 
-    #     create_group(group_name)
-    #     print(f"Group created: {group_name}")
+        created = create_group(group_name)
+        if created is None:
+            return
+        print(f"Group created: {group_name}")
 
-    # @requires_admin
-    # def do_add_user_to_group(self, arg):
-    #     """
-    #     Usage: add_user_to_group
-    #     """
-    #     group_name = prompt_required_text("group name")
-    #     if group_name is None:
-    #         return
+    @requires_admin
+    def do_add_user_to_group(self, arg):
+        """
+        Usage: add_user_to_group
+        """
+        group_name = prompt_required_text("group name")
+        if group_name is None:
+            return
 
-    #     username = prompt_required_text("username")
-    #     if username is None:
-    #         return
+        username = prompt_required_text("username")
+        if username is None:
+            return
 
-    #     user_data = load_user(username)
-    #     if user_data is None:
-    #         print(f"Error: User '{username}' does not exist.")
-    #         return
+        user_data = load_user(username)
+        if user_data is None:
+            print(f"Error: User '{username}' does not exist.")
+            return
 
-    #     group_data = load_group(group_name)
-    #     if group_data is None:
-    #         print(f"Error: Group '{group_name}' does not exist.")
-    #         return
+        group_data = load_group(group_name)
+        if group_data is None:
+            print(f"Error: Group '{group_name}' does not exist.")
+            return
 
-    #     user_id = user_data["user_id"]
+        added_to_group = add_user_to_group(group_name, username)
+        if not added_to_group:
+            print(f"Failed to add user '{username}' to group '{group_name}'.")
+            return
 
-    #     added_to_group = add_user_to_group(group_name, user_id)
-    #     if not added_to_group:
-    #         print(f"Failed to add user '{username}' to group '{group_name}'.")
-    #         return
-
-    #     print(f"User '{username}' added to group '{group_name}'.")
+        print(f"User '{username}' added to group '{group_name}'.")
 
     # @requires_admin
     # def do_remove_user_from_group(self, arg):

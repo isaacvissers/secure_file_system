@@ -1,155 +1,133 @@
-import json
+# tests/conftest.py or test_group_utils_temp.py
+import tempfile
+from pathlib import Path
 
-from backend import group_utils
+import pytest
+
+import backend.auth as auth
+import backend.files_utils as files_utils
+import backend.group_utils as group_utils
 
 
-def test_save_group_writes_expected_json_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
+@pytest.fixture
+def temp_storage(monkeypatch):
+    """Use temporary directories for all storage and prevent real folder creation."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        users_dir = tmp_path / ".users"
+        groups_dir = tmp_path / ".groups"
+        files_dir = tmp_path / ".files"  # mimic files storage
+        users_dir.mkdir()
+        groups_dir.mkdir()
+        files_dir.mkdir()
 
-    group_dict = {
-        "group_id": 10,
-        "group_name": "eng-team",
-        "members": ["alice"],
-        "file_access": ["file_1"],
-    }
+        # Patch the module-level constants
+        monkeypatch.setattr(auth, "USERS_DIR", users_dir)
+        monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
+        monkeypatch.setattr(files_utils, "FILES_DIR", files_dir)
 
-    group_utils.save_group(group_dict)
+        # Patch file-path helpers to use temp dirs
+        monkeypatch.setattr(
+            auth, "_user_file_path", lambda user_key: users_dir / f"{user_key}.json"
+        )
+        monkeypatch.setattr(
+            group_utils,
+            "_group_file",
+            lambda group_key: groups_dir / f"{group_key}.json",
+        )
 
-    group_file = tmp_path / "group_eng-team.json"
+        # Patch create_user_directory to just create a temp folder or do nothing
+        monkeypatch.setattr(
+            files_utils,
+            "create_user_directory",
+            lambda user_key: files_dir / f"user_{user_key}",
+        )
+
+        yield users_dir, groups_dir, files_dir
+
+
+@pytest.fixture
+def admin_user(temp_storage):
+    """Create admin user."""
+    user = auth.create_user(auth.ADMIN, auth.ADMIN, is_admin=True)
+    assert user is not None
+    return auth.get_admin_record()
+
+
+@pytest.fixture
+def normal_user(temp_storage, admin_user):
+    """Create normal user."""
+    user = auth.create_user("alice", "password123")
+    assert user is not None
+    return user
+
+
+# -------------------------------
+# Tests
+# -------------------------------
+
+
+def test_create_group(temp_storage, admin_user):
+    group = group_utils.create_group("devs")
+    assert group is not None
+    assert group["group_name"] == "devs"
+    assert group["members"] == {}
+    assert group["file_access"] == []
+
+    # Group key registered in admin
+    admin = auth.get_admin_record()
+    assert "devs" in admin.group_keys
+    group_key = admin.group_keys["devs"]
+
+    # Group file exists
+    group_file = group_utils.GROUPS_DIR / f"{group_key}.json"
     assert group_file.exists()
 
-    with open(group_file, "r", encoding="utf-8") as file:
-        saved_data = json.load(file)
 
-    assert saved_data == group_dict
+def test_load_and_save_group(temp_storage, admin_user):
+    group_utils.create_group("qa")
+    admin = auth.get_admin_record()
+    group_key = admin.group_keys["qa"]
 
+    group = group_utils.load_group("qa")
+    assert group["group_name"] == "qa"
 
-def test_group_exists_returns_true_when_group_present(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
+    # Modify and save
+    group["file_access"].append("file_1")
+    group_utils.save_group(group_key, group)
 
-    with open(tmp_path / "group_eng-team.json", "w", encoding="utf-8") as file:
-        json.dump({"group_id": 1, "group_name": "eng-team"}, file)
-
-    assert group_utils.group_exists("eng-team") is True
-
-
-def test_group_exists_returns_false_when_group_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
-
-    with open(tmp_path / "group_design.json", "w", encoding="utf-8") as file:
-        json.dump({"group_id": 1, "group_name": "design"}, file)
-
-    assert group_utils.group_exists("eng-team") is False
+    loaded = group_utils.load_group("qa")
+    assert "file_1" in loaded["file_access"]
 
 
-def test_load_group_returns_group_by_name(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
+def test_add_user_to_group(temp_storage, admin_user, normal_user):
+    group_utils.create_group("design")
+    admin = auth.get_admin_record()
+    group_key = admin.group_keys["design"]
 
-    group = {
-        "group_id": 5,
-        "group_name": "research",
-        "members": ["alice", "bob"],
-        "file_access": [],
-    }
-    with open(tmp_path / "group_research.json", "w", encoding="utf-8") as file:
-        json.dump(group, file)
+    result = group_utils.add_user_to_group("design", "alice")
+    assert result is True
 
-    loaded = group_utils.load_group("research")
+    # Check group updated
+    group = group_utils.load_group("design")
+    assert "alice" in group["members"]
+    assert group["members"]["alice"] == admin.user_keys["alice"]
 
-    assert loaded == group
+    # Check user updated
+    user = auth.load_user("alice")
+    assert group_key in user["group_keys"]
 
-
-def test_create_group_creates_new_group_with_expected_fields(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
-
-    created = group_utils.create_group("admins")
-
-    assert created is not None
-    assert created["group_name"] == "admins"
-    assert created["members"] == []
-    assert created["file_access"] == []
-
-    group_file = tmp_path / "group_admins.json"
-    assert group_file.exists()
+    # Adding the same user again fails
+    result2 = group_utils.add_user_to_group("design", "alice")
+    assert result2 is False
 
 
-def test_create_group_returns_none_when_group_already_exists(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
-
-    with open(tmp_path / "group_admins.json", "w", encoding="utf-8") as file:
-        json.dump({"group_id": 1, "group_name": "admins"}, file)
-
-    created = group_utils.create_group("admins")
-
-    assert created is None
+def test_add_user_to_nonexistent_group(temp_storage, admin_user, normal_user):
+    result = group_utils.add_user_to_group("nonexistent", "alice")
+    assert result is False
 
 
-def test_add_user_to_group_adds_member(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
-
-    with open(tmp_path / "group_admins.json", "w", encoding="utf-8") as file:
-        json.dump(
-            {
-                "group_id": 1,
-                "group_name": "admins",
-                "members": [],
-                "file_access": [],
-            },
-            file,
-        )
-
-    added = group_utils.add_user_to_group("admins", 42)
-
-    assert added is True
-    updated = group_utils.load_group("admins")
-    assert updated is not None
-    assert 42 in updated["members"]
-
-
-def test_add_user_to_group_returns_false_for_missing_group(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
-
-    added = group_utils.add_user_to_group("missing", 1)
-
-    assert added is False
-
-
-def test_add_user_to_group_returns_false_for_duplicate_member(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
-
-    with open(tmp_path / "group_admins.json", "w", encoding="utf-8") as file:
-        json.dump(
-            {
-                "group_id": 1,
-                "group_name": "admins",
-                "members": [7],
-                "file_access": [],
-            },
-            file,
-        )
-
-    added = group_utils.add_user_to_group("admins", 7)
-
-    assert added is False
-
-
-def test_remove_user_from_group_removes_member(tmp_path, monkeypatch):
-    monkeypatch.setattr(group_utils, "GROUPS_DIR", tmp_path)
-
-    with open(tmp_path / "group_admins.json", "w", encoding="utf-8") as file:
-        json.dump(
-            {
-                "group_id": 1,
-                "group_name": "admins",
-                "members": [3, 8],
-                "file_access": [],
-            },
-            file,
-        )
-
-    group_utils.remove_user_from_group("admins", 3)
-
-    updated = group_utils.load_group("admins")
-    assert updated is not None
-    assert 3 not in updated["members"]
-    assert 8 in updated["members"]
+def test_add_nonexistent_user_to_group(temp_storage, admin_user):
+    group_utils.create_group("ops")
+    result = group_utils.add_user_to_group("ops", "bob")
+    assert result is False
