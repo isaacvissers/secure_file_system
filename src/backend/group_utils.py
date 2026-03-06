@@ -1,91 +1,193 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Dict, Optional
+
+import backend.auth as auth
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 GROUPS_DIR = SRC_DIR / "storage/.groups"
 GROUPS_DIR.mkdir(parents=True, exist_ok=True)
 
-
 GroupsDict = Dict[str, Any]
 
 
-def _iter_group_records() -> Iterator[Tuple[Path, GroupsDict]]:
-    for file_path in GROUPS_DIR.glob("*.json"):
-        with open(file_path, "r", encoding="utf-8") as file:
-            yield file_path, json.load(file)
+# --------------------
+# Key Utilities
+# --------------------
 
 
-def _write_group_file(file_path: Path, group_dict: GroupsDict) -> None:
-    with open(file_path, "w", encoding="utf-8") as file:
-        json.dump(group_dict, file)
+def create_group_key(name: str) -> str:
+    return f"group_{name}"
 
 
-def _find_group_by_name(name: str) -> Optional[GroupsDict]:
-    for _, group_data in _iter_group_records():
-        if group_data.get("group_name") == name:
-            return group_data
-    return None
+# --------------------
+# File Utilities
+# --------------------
 
 
-def _next_group_id() -> int:
-    highest_group_id = 0
-    for _, group_data in _iter_group_records():
-        group_id = group_data.get("group_id", 0)
-        if isinstance(group_id, int) and group_id > highest_group_id:
-            highest_group_id = group_id
-    return highest_group_id + 1
-
-
-def group_exists(name: str) -> bool:
-    return _find_group_by_name(name) is not None
-
-
-def save_group(group_dict: GroupsDict) -> None:
-    group_file = GROUPS_DIR / f"group_{group_dict['group_name']}.json"
-    _write_group_file(group_file, group_dict)
+def _group_file(group_key: str) -> Path:
+    return GROUPS_DIR / f"{group_key}.json"
 
 
 def load_group(name: str) -> Optional[GroupsDict]:
-    return _find_group_by_name(name)
+    admin = auth.get_admin_record()
+    if not admin:
+        return None
+
+    group_key = admin.group_keys.get(name)
+    if not group_key:
+        return None
+
+    path = _group_file(group_key)
+    if not path.exists():
+        return None
+
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_group(group_key: str, group_dict: GroupsDict) -> None:
+    path = _group_file(group_key)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(group_dict, f)
+
+
+# --------------------
+# Group Creation
+# --------------------
 
 
 def create_group(name: str) -> Optional[GroupsDict]:
-    if group_exists(name):
+    admin = auth.get_admin_record()
+    if not admin:
+        print("Admin record not found.")
+        return None
+
+    if name in admin.group_keys:
         print(f"Group '{name}' already exists.")
         return None
 
-    group_dict = {
-        "group_id": _next_group_id(),
+    group_key = create_group_key(name)
+
+    group = {
         "group_name": name,
-        "members": [],
+        "members": {},
         "file_access": [],
     }
-    save_group(group_dict)
-    return group_dict
+
+    save_group(group_key, group)
+
+    admin.group_keys[name] = group_key
+    auth.save_user(auth.get_admin_key(), admin.__dict__)
+
+    return group
 
 
-def add_user_to_group(group_name: str, user_id: int) -> bool:
+# --------------------
+# User Management
+# --------------------
+
+
+def add_user_to_group(group_name: str, username: str) -> bool:
+    admin = auth.get_admin_record()
+    if not admin:
+        print("Admin record not found.")
+        return False
+
+    group_key = admin.group_keys.get(group_name)
+    if not group_key:
+        print(f"Group '{group_name}' not found.")
+        return False
+
+    user_key = admin.user_keys.get(username)
+    if not user_key:
+        print(f"User '{username}' not found.")
+        return False
+
     group = load_group(group_name)
-    if group is None:
-        print(f"Group '{group_name}' does not exist.")
+    if not group:
+        print("Group file not found.")
         return False
 
-    if user_id in group["members"]:
-        print(f"User '{user_id}' is already a member of '{group_name}'.")
+    user = auth.load_user(username)
+    if not user:
+        print("User file not found.")
         return False
 
-    group["members"].append(user_id)
-    save_group(group)
+    if not _add_member_to_group(group, username, user_key):
+        return False
+
+    _add_group_to_user(user, group_key)
+
+    save_group(group_key, group)
+    auth.save_user(user_key, user)
+
     return True
 
 
-def remove_user_from_group(group_name: str, user_id: int) -> None:
-    group = load_group(group_name)
-    if group is None:
-        return
+# --------------------
+# Helpers
+# --------------------
 
-    members = group.get("members", [])
-    if user_id in members:
-        members.remove(user_id)
-        save_group(group)
+
+def _add_member_to_group(group: dict, username: str, user_key: str) -> bool:
+    members = group.setdefault("members", {})
+
+    if username in members:
+        print("User already in group.")
+        return False
+
+    members[username] = user_key
+    return True
+
+
+def _add_group_to_user(user: dict, group_key: str):
+    group_keys = user.setdefault("group_keys", [])
+
+    if group_key not in group_keys:
+        group_keys.append(group_key)
+
+
+def remove_user_from_group(group_name: str, username: str) -> bool:
+    admin = auth.get_admin_record()
+    if not admin:
+        print("Admin record not found.")
+        return False
+
+    group_key = admin.group_keys.get(group_name)
+    if not group_key:
+        print(f"Group '{group_name}' not found.")
+        return False
+
+    user_key = admin.user_keys.get(username)
+    if not user_key:
+        print(f"User '{username}' not found.")
+        return False
+
+    group = load_group(group_name)
+    if not group:
+        print("Group file not found.")
+        return False
+
+    members = group.setdefault("members", {})
+    if username not in members:
+        print("User is not a member of the group.")
+        return False
+
+    # remove member from group
+    members.pop(username, None)
+
+    # remove group from user's group_keys
+    user = auth.load_user(username)
+    if user is None:
+        print("User file not found.")
+        return False
+
+    gkeys = user.setdefault("group_keys", [])
+    if group_key in gkeys:
+        gkeys.remove(group_key)
+
+    save_group(group_key, group)
+    auth.save_user(user_key, user)
+
+    return True

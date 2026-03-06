@@ -1,7 +1,7 @@
 import cmd
 
 from backend.auth import *
-from backend.auth import FILES_DIR, _iter_user_records
+from backend.auth import FILES_DIR
 from backend.cryptography_utils import *
 from backend.group_utils import *
 from cli_utils import *
@@ -37,26 +37,38 @@ class SecureFS(cmd.Cmd):
             return
         username, password = credentials
 
-        user_data = load_user(username)
-        if not user_data:
-            print("Error: User does not exist.")
+        admin = get_admin_record()
+        if not admin:
+            print("Error: Admin record missing.")
             return
 
-        salt = bytes.fromhex(user_data["salt"])
-        stored_hash = bytes.fromhex(user_data["password_hash"])
+        if username == ADMIN:
+            # Use the AdminUser object for admin login
+            expected_key = auth.create_user_key(username, password)
+            admin_key = auth.get_admin_key()
+            if expected_key != admin_key:
+                print("Error: Incorrect password.")
+                return
+            self.current_user = admin
+            # set working directory for admin session
+            self.current_working_directory = FILES_DIR / username
+        else:
+            user_key, user_dict = auth._resolve_user(admin, username)
+            if not user_dict:
+                print(f"Error: User '{username}' does not exist.")
+                return
 
-        if not verify_password(password.encode(), salt, stored_hash):
-            print("Error: Incorrect password.")
-            return
+            expected_key = auth.create_user_key(username, password)
+            if user_key != expected_key:
+                print("Error: Incorrect password.")
+                return
 
-        try:
-            private_key = decrypt_private_key(user_data, password)
-        except Exception:
-            print("Error: Failed to unlock private key.")
-            return
+            self.current_user = user_dict
+            # set working directory to the user's files directory
+            self.current_working_directory = FILES_DIR / username
 
-        self.current_user = {"user_data": user_data, "private_key": private_key}
-        self.current_working_directory = FILES_DIR / user_data["username"]
+        self.current_working_directory = FILES_DIR / self.current_user["username"]
+
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
@@ -154,7 +166,7 @@ class SecureFS(cmd.Cmd):
             print("Error: Username already exists.")
             return
 
-        print(f"User created: {created_user['username']} ")
+        print(f"User created: {username} ")
 
     @requires_admin
     def do_create_group(self, arg):
@@ -165,7 +177,9 @@ class SecureFS(cmd.Cmd):
         if group_name is None:
             return
 
-        create_group(group_name)
+        created = create_group(group_name)
+        if created is None:
+            return
         print(f"Group created: {group_name}")
 
     @requires_admin
@@ -191,9 +205,7 @@ class SecureFS(cmd.Cmd):
             print(f"Error: Group '{group_name}' does not exist.")
             return
 
-        user_id = user_data["user_id"]
-
-        added_to_group = add_user_to_group(group_name, user_id)
+        added_to_group = add_user_to_group(group_name, username)
         if not added_to_group:
             print(f"Failed to add user '{username}' to group '{group_name}'.")
             return
@@ -223,13 +235,16 @@ class SecureFS(cmd.Cmd):
             print(f"Error: Group '{group_name}' does not exist.")
             return
 
-        user_id = user_data["user_id"]
-        members = group_data.get("members", [])
-        if user_id not in members:
+        members = group_data.get("members", {})
+        if username not in members:
             print(f"User '{username}' is not a member of group '{group_name}'.")
             return
 
-        remove_user_from_group(group_name, user_id)
+        removed = remove_user_from_group(group_name, username)
+        if not removed:
+            print(f"Failed to remove user '{username}' from group '{group_name}'.")
+            return
+
         print(f"User '{username}' removed from group '{group_name}'.")
 
     @requires_admin
@@ -238,8 +253,16 @@ class SecureFS(cmd.Cmd):
         Usage: list_users
         """
         print("Users:")
-        for _, user_data in _iter_user_records():
-            print(f" - {user_data['username']} (ID: {user_data['user_id']})")
+        admin = get_admin_record()
+        if not admin:
+            return
+
+        keys = getattr(admin, "user_keys", {}) or {}
+        for uname in keys:
+            user = load_user(uname)
+            if user is None:
+                continue
+            print(f" - {user.get('username')}")
 
     def do_exit(self, arg):
         return True

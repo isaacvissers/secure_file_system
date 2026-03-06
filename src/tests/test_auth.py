@@ -1,119 +1,85 @@
 import json
 
-from backend import auth
+import backend.auth as auth
 from scripts import create_admin
 
 
-def test_save_user_writes_expected_json_file(tmp_path, monkeypatch):
+def test_create_user_key_and_admin_key():
+    k = auth.create_user_key("alice", "pw")
+    assert "alice" in k and "pw" in k
+    assert auth.get_admin_key() == auth.create_user_key("admin", "admin")
+
+
+def test_save_and_load_user_without_admin_index(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
+    user = {"username": "bob", "file_keys": [], "group_keys": []}
+    key = auth.create_user_key("bob", "pw")
+    auth.save_user(key, user)
 
-    user_dict = {
-        "user_id": 42,
-        "username": "alice",
-        "salt": "abc",
-        "password_hash": "def",
-        "is_admin": False,
-    }
-
-    auth.save_user(user_dict)
-
-    user_file = tmp_path / "user_42.json"
-    assert user_file.exists()
-
-    with open(user_file, "r") as file:
-        saved_data = json.load(file)
-
-    assert saved_data == user_dict
+    # load_user should find by scanning when no admin exists
+    loaded = auth.load_user("bob")
+    assert loaded is not None and loaded["username"] == "bob"
 
 
-def test_user_exists_returns_true_when_username_present(tmp_path, monkeypatch):
+def test_create_user_writes_file_and_updates_admin_index(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
+    # create an admin record first so create_user will add mapping
+    admin_key = auth.get_admin_key()
+    with open(tmp_path / f"{admin_key}.json", "w", encoding="utf-8") as f:
+        json.dump({"username": "admin", "user_keys": {}}, f)
 
-    with open(tmp_path / "user_1.json", "w") as file:
-        json.dump({"user_id": 1, "username": "alice"}, file)
+    # avoid creating real directories in tests
+    monkeypatch.setattr(auth, "create_user_directory", lambda _k: None)
 
-    with open(tmp_path / "user_2.json", "w") as file:
-        json.dump({"user_id": 2, "username": "bob"}, file)
-
-    assert auth.user_exists("alice") is True
-
-
-def test_user_exists_returns_false_when_username_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-
-    with open(tmp_path / "user_1.json", "w") as file:
-        json.dump({"user_id": 1, "username": "alice"}, file)
-
-    assert auth.user_exists("charlie") is False
-
-
-def test_load_user_returns_user_by_username(tmp_path, monkeypatch):
-    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-
-    user = {
-        "user_id": 7,
-        "username": "dana",
-        "salt": "aa",
-        "password_hash": "bb",
-        "is_admin": False,
-    }
-    with open(tmp_path / "user_7.json", "w") as file:
-        json.dump(user, file)
-
-    loaded = auth.load_user("dana")
-
-    assert loaded == user
-
-
-def test_create_user_saves_user_with_hashed_password(tmp_path, monkeypatch):
-    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-
-    created = auth.create_user("eve", "secret", is_admin=True)
-
+    created = auth.create_user("carol", "secret", is_admin=False)
     assert created is not None
-    assert created["username"] == "eve"
-    assert created["is_admin"] is True
-    assert len(created["salt"]) == 32
-    assert len(created["password_hash"]) == 64
 
-    user_file = tmp_path / f"user_{created['user_id']}.json"
-    assert user_file.exists()
+    user_key = auth.create_user_key("carol", "secret")
+    assert (tmp_path / f"{user_key}.json").exists()
+
+    # admin file should have been updated with mapping
+    with open(tmp_path / f"{admin_key}.json", "r", encoding="utf-8") as f:
+        admin_data = json.load(f)
+    assert admin_data.get("user_keys", {}).get("carol") == user_key
 
 
-def test_create_user_returns_none_when_username_exists(tmp_path, monkeypatch):
+def test_user_exists_and_get_admin_record(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
+    # write a simple user file
+    with open(tmp_path / "some.json", "w", encoding="utf-8") as f:
+        json.dump({"username": "dana"}, f)
 
-    with open(tmp_path / "user_1.json", "w") as file:
-        json.dump({"user_id": 1, "username": "frank"}, file)
+    assert auth.user_exists("dana") is True
+    assert auth.user_exists("nope") is False
 
-    created = auth.create_user("frank", "another-secret")
+    # test get_admin_record returns None when missing and AdminUser when present
+    assert auth.get_admin_record() is None
+    admin_key = auth.get_admin_key()
+    with open(tmp_path / f"{admin_key}.json", "w", encoding="utf-8") as f:
+        json.dump({"username": "admin", "user_keys": {}}, f)
+    admin = auth.get_admin_record()
+    assert admin is not None
+    assert getattr(admin, "user_keys", {}) == {}
 
-    assert created is None
 
-
-def test_ensure_admin_user_resets_password_when_requested(tmp_path, monkeypatch):
+def test_resolve_user_with_admin_index(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-    monkeypatch.setattr(create_admin, "USERS_DIR", tmp_path)
+    # prepare user file and admin mapping
+    key = auth.create_user_key("erin", "pw")
+    with open(tmp_path / f"{key}.json", "w", encoding="utf-8") as f:
+        json.dump({"username": "erin", "file_keys": [], "group_keys": []}, f)
 
-    with open(tmp_path / "user_1.json", "w") as file:
-        json.dump(
-            {
-                "user_id": 1,
-                "username": "admin",
-                "salt": "aa",
-                "password_hash": "bb",
-                "is_admin": True,
-            },
-            file,
-        )
+    admin_key = auth.get_admin_key()
+    with open(tmp_path / f"{admin_key}.json", "w", encoding="utf-8") as f:
+        json.dump({"username": "admin", "user_keys": {"erin": key}}, f)
 
-    user_data, status = create_admin.ensure_admin_user(
-        "admin", "new-password", reset_password=True
-    )
+    admin = auth.get_admin_record()
+    assert admin is not None
 
-    assert status == "updated"
-    assert user_data["salt"] != "aa"
-    assert user_data["password_hash"] != "bb"
+    user_key, user_dict = auth._resolve_user(admin, "erin")
+    assert user_key == key
+    assert user_dict is not None
+    assert user_dict["username"] == "erin"
 
 
 def test_create_user_creates_home_directory(tmp_path, monkeypatch):
