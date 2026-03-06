@@ -1,10 +1,12 @@
 import cmd
 
 from backend.auth import *
+from backend.auth import FILES_DIR
 from backend.cryptography_utils import *
-from backend.files_utils import FILES_DIR
 from backend.group_utils import *
 from cli_utils import *
+from models.directory import Directory
+from models.file import File
 
 
 class SecureFS(cmd.Cmd):
@@ -16,26 +18,14 @@ class SecureFS(cmd.Cmd):
 
     def _update_prompt(self):
         """Update the interactive prompt to include the logged-in username."""
-        if not self.current_user:
-            self.prompt = "SFS> "
-            return
-
-        # support both dataclass-like objects and the dict-shaped session
-        username = None
-        if isinstance(self.current_user, dict):
-            ud = self.current_user.get("user_data") or self.current_user
-            if isinstance(ud, dict):
-                username = ud.get("username")
-            else:
-                username = getattr(ud, "username", None)
+        if (
+            self.current_working_directory
+            and self.current_working_directory.is_relative_to(FILES_DIR)
+        ):
+            relative_path = self.current_working_directory.relative_to(FILES_DIR)
+            self.prompt = f"SFS/{relative_path}> "
         else:
-            username = getattr(self.current_user, "username", None)
-
-        if isinstance(username, str):
-            self.prompt = f"SFS/{username}> "
-            return
-
-        self.prompt = "SFS> "
+            self.prompt = "SFS> "
 
     @requires_logged_out
     def do_login(self, arg):
@@ -95,16 +85,76 @@ class SecureFS(cmd.Cmd):
         """
         Usage: mkdir <directory_name>
         """
-        directory_name = prompt_required_text("directory name")
+        if arg.strip():
+            directory_name = arg.strip()
+        else:
+            directory_name = prompt_required_text("directory name")
         if directory_name is None:
+            print("Error: Directory name is required.")
             return
 
-        directory_path = self.current_working_directory / directory_name
-        if directory_path.exists():
-            print(f"Error: Directory '{directory_name}' already exists.")
+        if not self.current_working_directory.is_relative_to(
+            FILES_DIR / self.current_user["username"]
+        ):
+            print("Error: Cannot create directories outside of your home directory.")
             return
-        directory_path.mkdir(parents=True, exist_ok=False)
-        print(f"Directory '{directory_name}' created.")
+
+        try:
+            directory = Directory.create(self.current_working_directory, directory_name)
+            print(f"Directory '{directory_name}' created.")
+        except FileExistsError as e:
+            print(f"Error: {e}")
+
+    @requires_login
+    def do_touch(self, arg):
+        """
+        Usage: touch <file_name>
+        """
+        if arg.strip():
+            file_name = arg.strip()
+        else:
+            file_name = prompt_required_text("file name")
+        if file_name is None:
+            print("Error: File name is required.")
+            return
+
+        if not self.current_working_directory.is_relative_to(
+            FILES_DIR / self.current_user["username"]
+        ):
+            print("Error: Cannot create files outside of your home directory.")
+            return
+
+        try:
+            file = File.create(self.current_working_directory, file_name)
+            print(f"File '{file_name}' created.")
+        except FileExistsError as e:
+            print(f"Error: {e}")
+
+    def do_cd(self, arg):
+        """
+        Usage: cd <directory_name>
+        """
+        if arg.strip():
+            directory_name = arg.strip()
+        else:
+            # go to users home directory if no argument provided
+            self.current_working_directory = FILES_DIR / self.current_user["username"]
+            self._update_prompt()
+            return
+        if directory_name is None:
+            print("Error: Directory name is required.")
+            return
+
+        new_path = (self.current_working_directory / directory_name).resolve()
+        if not new_path.is_relative_to(FILES_DIR.resolve()):
+            print("Error: Access outside of storage is not allowed.")
+            return
+        if not new_path.is_dir():
+            print(f"Error: '{directory_name}' is not a valid directory.")
+            return
+
+        self.current_working_directory = new_path
+        self._update_prompt()
 
     @requires_admin
     def do_create_user(self, arg):

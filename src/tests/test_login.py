@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 import backend.auth as auth
-import backend.files_utils as files_utils
 import main as main_module
+from backend.auth import FILES_DIR
 from main import SecureFS
 
 # ---------------------------
@@ -21,7 +21,7 @@ def temp_files_dir(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         # Patch FILES_DIR everywhere it's used
-        monkeypatch.setattr(files_utils, "FILES_DIR", tmp_path)
+        monkeypatch.setattr(auth, "FILES_DIR", tmp_path)
         monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
         # Patch create_user_key to return the username for simplicity
         monkeypatch.setattr(
@@ -66,9 +66,9 @@ def test_login_success(monkeypatch, capsys, temp_files_dir):
     shell = SecureFS()
     shell.do_login("")
 
-    # Assertions
-    assert shell.current_user == user_data
+    assert shell.current_user is not None
     assert shell.current_working_directory == temp_files_dir / "alice"
+    assert shell.current_user == user_data
     assert shell.prompt == "SFS/alice> "
     captured = capsys.readouterr()
     assert "Login successful" in captured.out
@@ -122,7 +122,6 @@ def test_login_sets_correct_working_directory(monkeypatch, temp_files_dir):
     """current_working_directory is set to FILES_DIR/username after login."""
     user_data = _make_user("carol")
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("carol", "pass"))
-    monkeypatch.setattr(main_module, "load_user", lambda username: user_data)
     monkeypatch.setattr(
         main_module,
         "get_admin_record",
@@ -136,6 +135,24 @@ def test_login_sets_correct_working_directory(monkeypatch, temp_files_dir):
     shell.do_login("")
 
     assert shell.current_working_directory == temp_files_dir / "carol"
+
+
+def test_login_does_not_overwrite_existing_session(monkeypatch, capsys):
+    """A logged-in user cannot overwrite the session with a second login call."""
+    original_user = {
+        "user_data": _make_user_data(username="first"),
+        "private_key": object(),
+    }
+
+    shell = SecureFS()
+    shell.current_user = original_user
+
+    # requires_logged_out decorator should block any new login
+    shell.do_login("")
+
+    captured = capsys.readouterr()
+    assert "Already logged in" in captured.out
+    assert shell.current_user is original_user
 
 
 def test_login_fails_when_admin_missing(monkeypatch, capsys):

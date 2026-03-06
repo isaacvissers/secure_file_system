@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 import main as main_module
+from backend.auth import FILES_DIR
 from main import SecureFS
 
 # ---------------------------------------------------------------------------
@@ -14,10 +15,15 @@ from main import SecureFS
 def _logged_in_shell():
     """Return a SecureFS instance that is already logged in as 'alice'."""
     shell = SecureFS()
-    shell.current_user = SimpleNamespace(username="alice")
-    shell.current_working_directory = SimpleNamespace(
-        __truediv__=lambda self, x: f"/fake/path/{x}"
-    )
+    shell.current_user = {
+        "user_data": {
+            "user_id": 1,
+            "username": "alice",
+            "is_admin": False,
+        },
+        "private_key": object(),
+    }
+    shell.current_working_directory = FILES_DIR / "alice"
     shell._update_prompt()
     return shell
 

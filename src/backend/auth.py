@@ -3,13 +3,19 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from backend.files_utils import create_user_directory
+from backend.cryptography_utils import *
+from backend.group_utils import load_group, save_group
+from models.directory import Directory
 from models.user import AdminUser, User
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"
 USERS_DIR.mkdir(parents=True, exist_ok=True)
 
+FILES_DIR = SRC_DIR / "storage/files"
+FILES_DIR.mkdir(parents=True, exist_ok=True)
+
+SALT_BYTES = 16
 ADMIN = "admin"
 SALT = "psalt"
 
@@ -176,9 +182,13 @@ def create_user(
     add_user_key_to_admin(username, user_key)
 
     if not is_admin:
-        create_user_directory(user_key)
-
+        create_user_directory(user_dict["username"])
     return user_dict
+
+
+def create_user_directory(username: str) -> Path:
+    """Create the home directory for a new user under FILES_DIR."""
+    return Directory.create(FILES_DIR, username)
 
 
 # --------------------

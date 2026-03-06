@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 import backend.auth as auth
-import backend.files_utils as files_utils
 import backend.group_utils as group_utils
 
 
@@ -16,7 +15,7 @@ def temp_storage(monkeypatch):
         tmp_path = Path(tmpdir)
         users_dir = tmp_path / ".users"
         groups_dir = tmp_path / ".groups"
-        files_dir = tmp_path / ".files"  # mimic files storage
+        files_dir = tmp_path / "files"  # mimic files storage
         users_dir.mkdir()
         groups_dir.mkdir()
         files_dir.mkdir()
@@ -24,7 +23,7 @@ def temp_storage(monkeypatch):
         # Patch the module-level constants
         monkeypatch.setattr(auth, "USERS_DIR", users_dir)
         monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
-        monkeypatch.setattr(files_utils, "FILES_DIR", files_dir)
+        monkeypatch.setattr(auth, "FILES_DIR", files_dir)
 
         # Patch file-path helpers to use temp dirs
         monkeypatch.setattr(
@@ -38,7 +37,7 @@ def temp_storage(monkeypatch):
 
         # Patch create_user_directory to just create a temp folder or do nothing
         monkeypatch.setattr(
-            files_utils,
+            auth,
             "create_user_directory",
             lambda user_key: files_dir / f"user_{user_key}",
         )

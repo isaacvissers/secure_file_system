@@ -1,6 +1,7 @@
 import json
 
-from backend import auth
+import backend.auth as auth
+from scripts import create_admin
 
 
 def test_create_user_key_and_admin_key():
@@ -75,6 +76,27 @@ def test_resolve_user_with_admin_index(tmp_path, monkeypatch):
     admin = auth.get_admin_record()
     assert admin is not None
 
-    user_key, user = auth._resolve_user(admin, "erin")
+    user_key, user_dict = auth._resolve_user(admin, "erin")
     assert user_key == key
-    assert user is not None and user.get("username") == "erin"
+    assert user_dict is not None
+    assert user_dict["username"] == "erin"
+
+
+def test_create_user_creates_home_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
+    monkeypatch.setattr(auth, "FILES_DIR", tmp_path)
+
+    user_dict = auth.create_user("tester", "password", is_admin=False)
+
+    user_dir = tmp_path / "tester"
+    assert user_dir.exists() and user_dir.is_dir()
+
+
+def test_create_admin_doesnt_create_home_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
+    monkeypatch.setattr(auth, "FILES_DIR", tmp_path)
+
+    user_dict = auth.create_user("tester", "password", is_admin=True)
+
+    user_dir = tmp_path / "tester"
+    assert not user_dir.exists() and not user_dir.is_dir()
