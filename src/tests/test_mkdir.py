@@ -14,10 +14,7 @@ def _logged_in_shell(tmp_path, monkeypatch):
     user_home = tmp_path / "alice"
     user_home.mkdir(exist_ok=True)
     shell = SecureFS()
-    shell.current_user = {
-        "user_data": _make_user_data(user_id=1, username="alice"),
-        "private_key": object(),
-    }
+    shell.current_user = _make_user_data(user_id=1, username="alice")
     shell.current_working_directory = user_home
     shell._update_prompt()
     return shell
@@ -141,10 +138,7 @@ def test_mkdir_blocked_outside_home_directory(tmp_path, monkeypatch, capsys):
     other_user.mkdir()
 
     shell = SecureFS()
-    shell.current_user = {
-        "user_data": _make_user_data(user_id=1, username="alice"),
-        "private_key": object(),
-    }
+    shell.current_user = _make_user_data(user_id=1, username="alice")
     # cwd is bob's directory, not alice's
     shell.current_working_directory = other_user
 
@@ -160,10 +154,7 @@ def test_mkdir_blocked_at_files_dir_root(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
 
     shell = SecureFS()
-    shell.current_user = {
-        "user_data": _make_user_data(user_id=1, username="alice"),
-        "private_key": object(),
-    }
+    shell.current_user = _make_user_data(user_id=1, username="alice")
     shell.current_working_directory = tmp_path  # FILES_DIR root, not alice's home
 
     shell.do_mkdir("intruder")
@@ -180,10 +171,7 @@ def test_mkdir_allowed_in_subdirectory_of_home(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
 
     shell = SecureFS()
-    shell.current_user = {
-        "user_data": _make_user_data(user_id=1, username="alice"),
-        "private_key": object(),
-    }
+    shell.current_user = _make_user_data(user_id=1, username="alice")
     shell.current_working_directory = subdir
 
     shell.do_mkdir("nested")

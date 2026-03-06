@@ -13,10 +13,7 @@ from tests.test_login import _make_user_data
 def _logged_in_shell(tmp_path):
     """Return a SecureFS with cwd inside a tmp_path that mimics FILES_DIR."""
     shell = SecureFS()
-    shell.current_user = {
-        "user_data": _make_user_data(user_id=1, username="alice"),
-        "private_key": object(),
-    }
+    shell.current_user = _make_user_data(user_id=1, username="alice")
     shell.current_working_directory = tmp_path
     shell._update_prompt()
     return shell
@@ -51,17 +48,16 @@ def test_cd_via_arg(tmp_path, monkeypatch):
     assert shell.current_working_directory == subdir.resolve()
 
 
-def test_cd_via_prompt(tmp_path, monkeypatch):
+def test_cd_no_arg(tmp_path, monkeypatch):
     """cd prompts for a name when arg is empty."""
     subdir = tmp_path / "archive"
     subdir.mkdir()
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    monkeypatch.setattr(main_module, "prompt_required_text", lambda label: "archive")
 
     shell = _logged_in_shell(tmp_path)
     shell.do_cd("")
 
-    assert shell.current_working_directory == subdir.resolve()
+    assert shell.current_working_directory == tmp_path / "alice"  # cd with empty arg goes to home dir
 
 
 def test_cd_error_when_directory_does_not_exist(tmp_path, monkeypatch, capsys):
@@ -137,14 +133,3 @@ def test_cd_allows_nested_directory(tmp_path, monkeypatch):
     shell.do_cd("b")
 
     assert shell.current_working_directory == nested.resolve()
-
-
-def test_cd_aborts_when_prompt_returns_none(tmp_path, monkeypatch, capsys):
-    """cd returns early without changing cwd when prompt returns None."""
-    monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    monkeypatch.setattr(main_module, "prompt_required_text", lambda label: None)
-
-    shell = _logged_in_shell(tmp_path)
-    shell.do_cd("")
-
-    assert shell.current_working_directory == tmp_path

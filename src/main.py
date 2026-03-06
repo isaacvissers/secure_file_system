@@ -67,8 +67,6 @@ class SecureFS(cmd.Cmd):
             # set working directory to the user's files directory
             self.current_working_directory = FILES_DIR / username
 
-        self.current_working_directory = FILES_DIR / self.current_user["username"]
-
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
@@ -95,7 +93,7 @@ class SecureFS(cmd.Cmd):
             print("Error: Directory name is required.")
             return
         
-        if not self.current_working_directory.is_relative_to(FILES_DIR / self.current_user["user_data"]["username"]):
+        if not self.current_working_directory.is_relative_to(FILES_DIR / self.current_user["username"]):
             print("Error: Cannot create directories outside of your home directory.")
             return
 
@@ -118,7 +116,7 @@ class SecureFS(cmd.Cmd):
             print("Error: File name is required.")
             return
 
-        if not self.current_working_directory.is_relative_to(FILES_DIR / self.current_user["user_data"]["username"]):
+        if not self.current_working_directory.is_relative_to(FILES_DIR / self.current_user["username"]):
             print("Error: Cannot create files outside of your home directory.")
             return
 
@@ -135,7 +133,10 @@ class SecureFS(cmd.Cmd):
         if arg.strip():
             directory_name = arg.strip()
         else:
-            directory_name = prompt_required_text("directory name")
+            # go to users home directory if no argument provided
+            self.current_working_directory = FILES_DIR / self.current_user["username"]
+            self._update_prompt()
+            return
         if directory_name is None:
             print("Error: Directory name is required.")
             return
