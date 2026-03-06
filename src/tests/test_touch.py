@@ -2,7 +2,6 @@ import main as main_module
 from main import SecureFS
 from tests.test_login import _make_user_data
 
-
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
@@ -14,7 +13,7 @@ def _logged_in_shell(tmp_path, monkeypatch):
     user_home = tmp_path / "alice"
     user_home.mkdir(exist_ok=True)
     shell = SecureFS()
-    shell.current_user =  _make_user_data(user_id=1, username="alice")
+    shell.current_user = _make_user_data(user_id=1, username="alice")
     shell.current_working_directory = user_home
     shell._update_prompt()
     return shell

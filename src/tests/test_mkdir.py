@@ -179,4 +179,3 @@ def test_mkdir_allowed_in_subdirectory_of_home(tmp_path, monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "created" in captured.out
     assert (subdir / "nested").is_dir()
-

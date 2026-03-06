@@ -57,7 +57,9 @@ def test_cd_no_arg(tmp_path, monkeypatch):
     shell = _logged_in_shell(tmp_path)
     shell.do_cd("")
 
-    assert shell.current_working_directory == tmp_path / "alice"  # cd with empty arg goes to home dir
+    assert (
+        shell.current_working_directory == tmp_path / "alice"
+    )  # cd with empty arg goes to home dir
 
 
 def test_cd_error_when_directory_does_not_exist(tmp_path, monkeypatch, capsys):

@@ -6,13 +6,8 @@ SRC_DIR = CURRENT_DIR.parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from backend.auth import (
-    ADMIN,
-    _user_file_path,
-    create_user,
-    get_admin_key,
-    get_admin_record,
-)
+from backend.auth import (ADMIN, _user_file_path, create_user, get_admin_key,
+                          get_admin_record)
 
 
 def ensure_admin_user(username: str, password: str, reset_password: bool = False):

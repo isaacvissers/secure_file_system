@@ -9,7 +9,6 @@ class User:
     group_keys: List[str] = field(default_factory=list)
 
 
-
 @dataclass
 class AdminUser(User):
     user_keys: Dict[str, str] = field(
