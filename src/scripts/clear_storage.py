@@ -3,7 +3,7 @@ clear_storage.py  –  Delete all contents of the storage directory.
 
 Removes every file and subdirectory inside storage/ recursively while
 keeping the top-level storage/ folder and its three root subdirectories
-(.files, .groups, .users) in place.
+(files, .groups, .users) in place.
 
 Usage:
     python scripts/clear_storage.py
@@ -17,7 +17,7 @@ from pathlib import Path
 STORAGE_DIR = Path(__file__).resolve().parents[1] / "storage"
 
 # Subdirectories to clear (but preserve the directories themselves).
-STORAGE_SUBDIRS = [".files", ".groups", ".users"]
+STORAGE_SUBDIRS = ["files", ".groups", ".users"]
 
 
 def clear_storage(yes: bool = False) -> None:

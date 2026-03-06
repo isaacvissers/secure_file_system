@@ -15,7 +15,7 @@ def temp_storage(monkeypatch):
         tmp_path = Path(tmpdir)
         users_dir = tmp_path / ".users"
         groups_dir = tmp_path / ".groups"
-        files_dir = tmp_path / ".files"  # mimic files storage
+        files_dir = tmp_path / "files"  # mimic files storage
         users_dir.mkdir()
         groups_dir.mkdir()
         files_dir.mkdir()

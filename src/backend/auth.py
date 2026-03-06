@@ -12,7 +12,7 @@ SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"
 USERS_DIR.mkdir(parents=True, exist_ok=True)
 
-FILES_DIR = SRC_DIR / "storage/.files"
+FILES_DIR = SRC_DIR / "storage/files"
 FILES_DIR.mkdir(parents=True, exist_ok=True)
 
 SALT_BYTES = 16
