@@ -156,6 +156,20 @@ class SecureFS(cmd.Cmd):
         self.current_working_directory = new_path
         self._update_prompt()
 
+    def do_ls(self, arg):
+        """
+        Usage: ls
+        """
+        entries = list(self.current_working_directory.iterdir())
+        dir_names = {e.name for e in entries if e.is_dir()}
+        for entry in entries:
+            if entry.is_dir():
+                print(f"{entry.name}/")
+            elif entry.suffix == ".json" and entry.stem in dir_names:
+                continue
+            else:
+                print(entry.name.replace(".json", "", 1))
+
     @requires_admin
     def do_create_user(self, arg):
         """
