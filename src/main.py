@@ -1,4 +1,6 @@
 import cmd
+import json
+import shlex
 
 from backend.auth import *
 from backend.auth import FILES_DIR
@@ -130,6 +132,7 @@ class SecureFS(cmd.Cmd):
         except FileExistsError as e:
             print(f"Error: {e}")
 
+    @requires_login
     def do_cd(self, arg):
         """
         Usage: cd <directory_name>
@@ -156,6 +159,7 @@ class SecureFS(cmd.Cmd):
         self.current_working_directory = new_path
         self._update_prompt()
 
+    @requires_login
     def do_ls(self, arg):
         """
         Usage: ls
@@ -169,6 +173,165 @@ class SecureFS(cmd.Cmd):
                 continue
             else:
                 print(entry.name.replace(".json", "", 1))
+
+    @requires_login
+    def do_pwd(self, arg):
+        """
+        Usage: pwd
+        """
+        if (
+            self.current_working_directory
+            and self.current_working_directory.is_relative_to(FILES_DIR)
+        ):
+            relative_path = self.current_working_directory.relative_to(FILES_DIR)
+            pwd_str = f"SFS/{relative_path} "
+        else:
+            pwd_str = "SFS"
+
+        print(pwd_str)
+
+    @requires_login
+    def do_cat(self, arg):
+        """
+        Usage: cat <file_name>
+        """
+        if not arg.strip():
+            print("Error: File name is required.")
+            return
+
+        file_name = arg.strip() + ".json"
+        file_path = self.current_working_directory / file_name
+
+        if not file_path.is_file():
+            print(f"Error: '{arg.strip()}' is not a valid file.")
+            return
+
+        # TODO: ensure user has permission to read the file
+
+        try:
+            with open(file_path, "r") as f:
+                # TODO: actually decrypt the file contents instead of just printing the raw encrypted body
+                file_data = json.load(f)
+                if isinstance(file_data, dict) and "encrypted_body" in file_data:
+                    print(file_data["encrypted_body"])
+                else:
+                    print("Invalid file format: missing 'encrypted_body' field.")
+        except Exception as e:
+            print(f"Error reading file: {e}")
+
+    @requires_login
+    def do_echo(self, arg):
+        """
+        Usage:
+          echo [-n] <content>
+          echo [-n] <content> > <file_name>
+          echo [-n] <content> >> <file_name>
+        """
+        # TODO: ensure user has permission to write to file
+
+        try:
+            lexer = shlex.shlex(arg, posix=True, punctuation_chars=">")
+            lexer.whitespace_split = True
+            lexer.commenters = ""
+            tokens = list(lexer)
+        except ValueError as e:
+            print(f"Error: {e}")
+            return
+
+        suppress_newline = False
+        if tokens and tokens[0] == "-n":
+            suppress_newline = True
+            tokens = tokens[1:]
+
+        redirect_index = None
+        redirect_op = None
+        for idx, token in enumerate(tokens):
+            if token in {">", ">>"}:
+                redirect_index = idx
+                redirect_op = token
+                break
+
+        if redirect_index is None:
+            output = " ".join(tokens)
+            print(output, end="" if suppress_newline else "\n")
+            return
+
+        content_tokens = tokens[:redirect_index]
+        target_tokens = tokens[redirect_index + 1 :]
+
+        if len(target_tokens) != 1:
+            print(
+                "Error: Invalid syntax. Usage: echo [-n] <content> [> | >>] <file_name>"
+            )
+            return
+
+        file_name = target_tokens[0].strip()
+        if not file_name:
+            print("Error: File name is required.")
+            return
+        if not file_name.endswith(".json"):
+            file_name += ".json"
+
+        file_path = self.current_working_directory / file_name
+        content = " ".join(content_tokens)
+        output = content if suppress_newline else content + "\n"
+        append_mode = redirect_op == ">>"
+
+        try:
+            # TODO: decrypt body contents first, modify the decrypted content, then re-encrypt and write back to file instead of just writing raw output
+            if not file_path.exists():
+                logical_name = (
+                    file_name[:-5] if file_name.endswith(".json") else file_name
+                )
+                File.create(self.current_working_directory, logical_name)
+
+            with open(file_path, "r", encoding="utf-8") as f:
+                file_data = json.load(f)
+
+            if not isinstance(file_data, dict) or "encrypted_body" not in file_data:
+                print("Invalid file format: missing 'encrypted_body' field.")
+                return
+
+            existing_body = file_data.get("encrypted_body", "")
+            if not isinstance(existing_body, str):
+                existing_body = str(existing_body)
+
+            file_data["encrypted_body"] = (
+                existing_body + output if append_mode else output
+            )
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(file_data, f, indent=4)
+
+        except Exception as e:
+            print(f"Error writing to file: {e}")
+
+    @requires_login
+    def do_mv(self, arg):
+        """
+        Usage: mv <source> <destination>
+        """
+        tokens = shlex.split(arg)
+        if len(tokens) != 2:
+            print("Error: Invalid syntax. Usage: mv <source> <destination>")
+            return
+
+        # rename the file, must be within same directory
+        source_name, dest_name = tokens
+        source_path = self.current_working_directory / (source_name + ".json")
+        dest_path = self.current_working_directory / (dest_name + ".json")
+
+        if not source_path.is_file():
+            print(f"Error: Source file '{source_name}' does not exist.")
+            return
+        if dest_path.exists():
+            print(f"Error: Destination file '{dest_name}' already exists.")
+            return
+        try:
+            file = File.get_file(source_path)
+            file.rename_file(dest_name)
+        except Exception as e:
+            print(f"Error renaming file: {e}")
 
     @requires_admin
     def do_create_user(self, arg):
