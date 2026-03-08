@@ -205,7 +205,7 @@ class SecureFS(cmd.Cmd):
         if not file_path.is_file():
             print(f"Error: '{arg.strip()}' is not a valid file.")
             return
-        
+
         # TODO: ensure user has permission to read the file
 
         try:
@@ -280,7 +280,9 @@ class SecureFS(cmd.Cmd):
         try:
             # TODO: decrypt body contents first, modify the decrypted content, then re-encrypt and write back to file instead of just writing raw output
             if not file_path.exists():
-                logical_name = file_name[:-5] if file_name.endswith(".json") else file_name
+                logical_name = (
+                    file_name[:-5] if file_name.endswith(".json") else file_name
+                )
                 File.create(self.current_working_directory, logical_name)
 
             with open(file_path, "r", encoding="utf-8") as f:
@@ -313,7 +315,7 @@ class SecureFS(cmd.Cmd):
         if len(tokens) != 2:
             print("Error: Invalid syntax. Usage: mv <source> <destination>")
             return
-        
+
         # rename the file, must be within same directory
         source_name, dest_name = tokens
         source_path = self.current_working_directory / (source_name + ".json")

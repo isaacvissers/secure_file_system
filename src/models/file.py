@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from isort import file
-
 
 class Permission(Enum):
     USER = "user"
@@ -41,7 +39,7 @@ class File:
         data = cls.to_json(instance)
         path.write_text(data, encoding="utf-8")
         return instance
-    
+
     @classmethod
     def get_file(cls, path: Path) -> "File":
         """Read the file from disk at <path> and return a File instance."""
@@ -58,7 +56,7 @@ class File:
                 encrypted_file_key=data["encrypted_file_key"],
                 path=Path(data["path"]),
             )
-    
+
     def rename_file(self, new_name: str) -> None:
         """Rename the file on disk to <new_name>.json and change File instance to use updated name and path."""
         new_path = self.path.parent / f"{new_name}.json"
