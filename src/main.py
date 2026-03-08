@@ -130,6 +130,7 @@ class SecureFS(cmd.Cmd):
         except FileExistsError as e:
             print(f"Error: {e}")
 
+    @requires_login
     def do_cd(self, arg):
         """
         Usage: cd <directory_name>
@@ -156,6 +157,7 @@ class SecureFS(cmd.Cmd):
         self.current_working_directory = new_path
         self._update_prompt()
 
+    @requires_login
     def do_ls(self, arg):
         """
         Usage: ls
@@ -169,6 +171,22 @@ class SecureFS(cmd.Cmd):
                 continue
             else:
                 print(entry.name.replace(".json", "", 1))
+
+    @requires_login
+    def do_pwd(self, arg):
+        """
+        Usage: pwd
+        """
+        if (
+            self.current_working_directory
+            and self.current_working_directory.is_relative_to(FILES_DIR)
+        ):
+            relative_path = self.current_working_directory.relative_to(FILES_DIR)
+            pwd_str = f"SFS/{relative_path} "
+        else:
+            pwd_str = "SFS"
+
+        print(pwd_str)
 
     @requires_admin
     def do_create_user(self, arg):
