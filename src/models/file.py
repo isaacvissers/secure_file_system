@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from isort import file
+
 
 class Permission(Enum):
     USER = "user"
@@ -39,6 +41,31 @@ class File:
         data = cls.to_json(instance)
         path.write_text(data, encoding="utf-8")
         return instance
+    
+    @classmethod
+    def get_file(cls, path: Path) -> "File":
+        """Read the file from disk at <path> and return a File instance."""
+        if not path.exists():
+            raise FileNotFoundError(f"{path} does not exist")
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return cls(
+                file_name=data["file_name"],
+                owner_name=data["owner_name"],
+                permission=Permission(data["permission"]),
+                encrypted_name=data["encrypted_name"],
+                encrypted_body=data["encrypted_body"],
+                encrypted_file_key=data["encrypted_file_key"],
+                path=Path(data["path"]),
+            )
+    
+    def rename_file(self, new_name: str) -> None:
+        """Rename the file on disk to <new_name>.json and change File instance to use updated name and path."""
+        new_path = self.path.parent / f"{new_name}.json"
+        if new_path.exists():
+            raise FileExistsError(f"{new_path} already exists")
+        self.path.rename(new_path)
+        self.file_name = new_name
 
     def to_json(self) -> str:
         """Convert the File instance to a JSON string."""

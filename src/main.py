@@ -203,7 +203,7 @@ class SecureFS(cmd.Cmd):
         file_path = self.current_working_directory / file_name
 
         if not file_path.is_file():
-            print(f"Error: '{file_name}' is not a valid file.")
+            print(f"Error: '{arg.strip()}' is not a valid file.")
             return
         
         # TODO: ensure user has permission to read the file
@@ -303,6 +303,33 @@ class SecureFS(cmd.Cmd):
 
         except Exception as e:
             print(f"Error writing to file: {e}")
+
+    @requires_login
+    def do_mv(self, arg):
+        """
+        Usage: mv <source> <destination>
+        """
+        tokens = shlex.split(arg)
+        if len(tokens) != 2:
+            print("Error: Invalid syntax. Usage: mv <source> <destination>")
+            return
+        
+        # rename the file, must be within same directory
+        source_name, dest_name = tokens
+        source_path = self.current_working_directory / (source_name + ".json")
+        dest_path = self.current_working_directory / (dest_name + ".json")
+
+        if not source_path.is_file():
+            print(f"Error: Source file '{source_name}' does not exist.")
+            return
+        if dest_path.exists():
+            print(f"Error: Destination file '{dest_name}' already exists.")
+            return
+        try:
+            file = File.get_file(source_path)
+            file.rename_file(dest_name)
+        except Exception as e:
+            print(f"Error renaming file: {e}")
 
     @requires_admin
     def do_create_user(self, arg):
