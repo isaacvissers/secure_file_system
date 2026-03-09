@@ -307,6 +307,9 @@ class SecureFS(cmd.Cmd):
 
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(file_data, f, indent=4)
+                add_file_to_user(
+                    file_data.get("encrypted_name"), self.current_user["username"]
+                )
 
         except Exception as e:
             print(f"Error writing to file: {e}")
