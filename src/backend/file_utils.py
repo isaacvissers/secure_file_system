@@ -1,8 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from backend.auth import (_get_admin_or_fail, get_admin_record, load_user,
-                          save_user)
+from backend.auth import _get_admin_or_fail, get_admin_record, load_user, save_user
 
 # --------------------
 # File Management
