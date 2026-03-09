@@ -5,6 +5,7 @@ import shlex
 from backend.auth import *
 from backend.auth import FILES_DIR
 from backend.cryptography_utils import *
+from backend.file_utils import *
 from backend.group_utils import *
 from cli_utils import *
 from models.directory import Directory
@@ -103,6 +104,9 @@ class SecureFS(cmd.Cmd):
 
         try:
             directory = Directory.create(self.current_working_directory, directory_name)
+            add_file_to_user(
+                directory.metadata.encrypted_name, self.current_user.get("username")
+            )
             print(f"Directory '{directory_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -128,6 +132,7 @@ class SecureFS(cmd.Cmd):
 
         try:
             file = File.create(self.current_working_directory, file_name)
+            add_file_to_user(file.encrypted_name, self.current_user["username"])
             print(f"File '{file_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -302,6 +307,9 @@ class SecureFS(cmd.Cmd):
 
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(file_data, f, indent=4)
+                add_file_to_user(
+                    file_data.get("encrypted_name"), self.current_user["username"]
+                )
 
         except Exception as e:
             print(f"Error writing to file: {e}")

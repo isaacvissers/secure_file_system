@@ -122,3 +122,88 @@ def test_to_json_permission_is_serialised(tmp_path):
     f = File.create(tmp_path, "doc")
     data = json.loads(f.to_json())
     assert data["permission"] == f.permission.value
+
+
+# ---------------------------------------------------------------------------
+# file_utils.add_file_to_user
+# ---------------------------------------------------------------------------
+
+
+def test_add_file_to_user_stores_hex_for_bytes(tmp_path, monkeypatch):
+    """Passing raw bytes stores a hex string in the user's file_keys."""
+    import backend.auth as auth
+    from backend.file_utils import add_file_to_user
+
+    # isolate storage to tmp_path
+    users_dir = tmp_path / "users"
+    files_dir = tmp_path / "files"
+    users_dir.mkdir()
+    files_dir.mkdir()
+    monkeypatch.setattr(auth, "USERS_DIR", users_dir)
+    monkeypatch.setattr(auth, "FILES_DIR", files_dir)
+
+    # create an admin record so create_user can update the admin index
+    admin_key = auth.get_admin_key()
+    admin_record = {
+        "username": "admin",
+        "file_keys": [],
+        "user_keys": {},
+        "group_keys": {},
+    }
+    auth.save_user(admin_key, admin_record)
+
+    # create a normal user
+    created = auth.create_user("bob", "pw", is_admin=False)
+    assert created is not None
+
+    # add raw bytes
+    b = b"secretname"
+    res = add_file_to_user(b, "bob")
+    assert res is True
+
+    user = auth.load_user("bob")
+    assert user is not None
+    # hex of 'secretname'
+    assert b.hex() in user.get("file_keys", [])
+
+
+def test_add_file_to_user_with_directory_object(tmp_path, monkeypatch):
+    """Passing a Directory object stores its metadata.encrypted_name hex."""
+    import backend.auth as auth
+    from backend.file_utils import add_file_to_user
+    from models.directory import Directory
+
+    users_dir = tmp_path / "users"
+    files_dir = tmp_path / "files"
+    users_dir.mkdir()
+    files_dir.mkdir()
+    monkeypatch.setattr(auth, "USERS_DIR", users_dir)
+    monkeypatch.setattr(auth, "FILES_DIR", files_dir)
+
+    admin_key = auth.get_admin_key()
+    admin_record = {
+        "username": "admin",
+        "file_keys": [],
+        "user_keys": {},
+        "group_keys": {},
+    }
+    auth.save_user(admin_key, admin_record)
+
+    created = auth.create_user("carol", "pw", is_admin=False)
+    assert created is not None
+
+    # create a directory in the user's files area
+    user_home = files_dir / "carol"
+    # Directory.create expects the parent dir to exist
+    user_home.mkdir(exist_ok=True)
+    directory = Directory.create(files_dir / "carol", "docs")
+
+    res = add_file_to_user(directory, "carol")
+    assert res is True
+
+    user = auth.load_user("carol")
+    assert user is not None
+    # directory.metadata.encrypted_name as hex should be present
+    enc = directory.metadata.encrypted_name
+    assert isinstance(enc, (bytes, bytearray))
+    assert enc.hex() in user.get("file_keys", [])
