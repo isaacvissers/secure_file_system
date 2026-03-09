@@ -183,7 +183,7 @@ def create_user(
 
     if not is_admin:
         create_user_directory(user_dict["username"])
-        
+
         added_to_group = add_user_to_group("all", username)
         if not added_to_group:
             print(f"Failed to add user '{username}' to group 'all'.")

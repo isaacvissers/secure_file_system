@@ -164,7 +164,9 @@ def test_set_permissions_recursive_updates_subtree(tmp_path, monkeypatch, capsys
             assert file_data["permission"] == "all"
 
 
-def test_set_permissions_without_recursive_keeps_children(tmp_path, monkeypatch, capsys):
+def test_set_permissions_without_recursive_keeps_children(
+    tmp_path, monkeypatch, capsys
+):
     """set_permissions without -r only updates target metadata file."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     home = tmp_path / "alice"

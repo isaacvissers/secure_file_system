@@ -54,7 +54,15 @@ def admin_user(temp_storage):
 
 
 @pytest.fixture
-def normal_user(temp_storage, admin_user):
+def all_group(temp_storage, admin_user):
+    """Create the 'all' group required for user creation."""
+    group = group_utils.create_group("all")
+    assert group is not None
+    return group
+
+
+@pytest.fixture
+def normal_user(temp_storage, admin_user, all_group):
     """Create normal user."""
     user = auth.create_user("alice", "password123")
     assert user is not None
@@ -99,7 +107,7 @@ def test_load_and_save_group(temp_storage, admin_user):
     assert "file_1" in loaded["file_access"]
 
 
-def test_add_user_to_group(temp_storage, admin_user, normal_user):
+def test_add_user_to_group(temp_storage, admin_user, all_group, normal_user):
     group_utils.create_group("design")
     admin = auth.get_admin_record()
     group_key = admin.group_keys["design"]
@@ -109,8 +117,9 @@ def test_add_user_to_group(temp_storage, admin_user, normal_user):
 
     # Check group updated
     group = group_utils.load_group("design")
-    assert "alice" in group["members"]
-    assert group["members"]["alice"] == admin.user_keys["alice"]
+    user_key = admin.user_keys["alice"]
+    assert user_key in group["members"]
+    assert group["members"][user_key] == "alice"
 
     # Check user updated
     user = auth.load_user("alice")
@@ -121,7 +130,9 @@ def test_add_user_to_group(temp_storage, admin_user, normal_user):
     assert result2 is False
 
 
-def test_add_user_to_nonexistent_group(temp_storage, admin_user, normal_user):
+def test_add_user_to_nonexistent_group(
+    temp_storage, admin_user, all_group, normal_user
+):
     result = group_utils.add_user_to_group("nonexistent", "alice")
     assert result is False
 
@@ -130,3 +141,22 @@ def test_add_nonexistent_user_to_group(temp_storage, admin_user):
     group_utils.create_group("ops")
     result = group_utils.add_user_to_group("ops", "bob")
     assert result is False
+
+
+def test_new_user_automatically_added_to_all_group(temp_storage, admin_user, all_group):
+    """Test that new users are automatically added to the 'all' group."""
+    # Create a new user
+    user = auth.create_user("bob", "password456")
+    assert user is not None
+
+    # Verify user was added to "all" group
+    all_group_data = group_utils.load_group("all")
+    admin = auth.get_admin_record()
+    bob_user_key = admin.user_keys["bob"]
+    assert bob_user_key in all_group_data["members"]
+    assert all_group_data["members"][bob_user_key] == "bob"
+
+    # Verify user's group_keys includes the "all" group
+    bob_user = auth.load_user("bob")
+    all_group_key = admin.group_keys["all"]
+    assert all_group_key in bob_user["group_keys"]
