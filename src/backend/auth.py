@@ -182,7 +182,13 @@ def create_user(
     add_user_key_to_admin(username, user_key)
 
     if not is_admin:
-        create_user_directory(user_dict["username"])
+        dir = create_user_directory(user_dict["username"])
+        try:
+            from backend.file_utils import add_file_to_user
+
+            add_file_to_user(dir.metadata.encrypted_name, username)
+        except Exception:
+            pass
     return user_dict
 
 
