@@ -53,8 +53,3 @@ def add_file_to_user(file_key: Any, username: str) -> bool:
     save_user(user_key, user)
 
     return True
-
-
-def add_file_to_group(file_key: Any, group_name: str) -> bool:
-
-    pass
