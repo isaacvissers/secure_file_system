@@ -336,19 +336,31 @@ class SecureFS(cmd.Cmd):
     @requires_login
     def do_set_permissions(self, arg):
         """
-        Usage: set_permissions <file_name> <permissions>
+        Usage: set_permissions <file_name> <permissions> [-r]
         Permissions format: 'user', 'group', or 'all'
         """
         tokens = shlex.split(arg)
-        if len(tokens) != 2:
-            print("Error: Invalid syntax. Usage: chmod <file_name> <permissions>")
+        if len(tokens) not in {2, 3}:
+            print(
+                "Error: Invalid syntax. Usage: set_permissions <file_name> <permissions> [-r]"
+            )
             return
 
-        file_name, permissions = tokens
+        recursive = False
+        if len(tokens) == 3:
+            if tokens[2] != "-r":
+                print(
+                    "Error: Invalid syntax. Usage: set_permissions <file_name> <permissions> [-r]"
+                )
+                return
+            recursive = True
+
+        file_name, permissions = tokens[:2]
 
         file_name = file_name.rstrip("/")
 
         file_path = self.current_working_directory / (file_name + ".json")
+        directory_path = self.current_working_directory / file_name
 
         if not file_path.is_file():
             print(f"Error: File '{file_name}' does not exist.")
@@ -367,12 +379,16 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            with open(file_path, "r") as f:
-                # TODO: actually decrypt the file contents instead of just printing the raw encrypted body
-                file_data = json.load(f)
-                file_data["permission"] = permissions
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(file_data, f, indent=4)
+            target_paths = [file_path]
+            if recursive and directory_path.is_dir():
+                target_paths.extend(directory_path.rglob("*.json"))
+
+            for target_path in target_paths:
+                with open(target_path, "r") as f:
+                    file_data = json.load(f)
+                    file_data["permission"] = permissions
+                with open(target_path, "w", encoding="utf-8") as f:
+                    json.dump(file_data, f, indent=4)
         except Exception as e:
             print(f"Error reading file: {e}")
 

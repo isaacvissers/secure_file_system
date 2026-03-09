@@ -2,6 +2,7 @@ import json
 
 import main as main_module
 from main import SecureFS
+from models.directory import Directory
 from models.file import File
 from tests.test_login import _make_user_data
 
@@ -138,6 +139,56 @@ def test_set_permissions_strips_trailing_slash(tmp_path, monkeypatch, capsys):
     with open(file_path, "r") as f:
         file_data = json.load(f)
         assert file_data["permission"] == "user"
+
+
+def test_set_permissions_recursive_updates_subtree(tmp_path, monkeypatch, capsys):
+    """set_permissions with -r updates nested directory and file metadata."""
+    shell = _logged_in_shell(tmp_path, monkeypatch)
+    home = tmp_path / "alice"
+
+    Directory.create(home, "project")
+    File.create(home / "project", "readme")
+    Directory.create(home / "project", "docs")
+    File.create(home / "project" / "docs", "notes")
+
+    shell.do_set_permissions("project all -r")
+
+    for path in [
+        home / "project.json",
+        home / "project" / "readme.json",
+        home / "project" / "docs.json",
+        home / "project" / "docs" / "notes.json",
+    ]:
+        with open(path, "r") as f:
+            file_data = json.load(f)
+            assert file_data["permission"] == "all"
+
+
+def test_set_permissions_without_recursive_keeps_children(tmp_path, monkeypatch, capsys):
+    """set_permissions without -r only updates target metadata file."""
+    shell = _logged_in_shell(tmp_path, monkeypatch)
+    home = tmp_path / "alice"
+
+    Directory.create(home, "project")
+    File.create(home / "project", "readme")
+
+    shell.do_set_permissions("project group")
+
+    with open(home / "project.json", "r") as f:
+        assert json.load(f)["permission"] == "group"
+    with open(home / "project" / "readme.json", "r") as f:
+        assert json.load(f)["permission"] == "user"
+
+
+def test_set_permissions_invalid_third_argument(tmp_path, monkeypatch, capsys):
+    """set_permissions rejects third args other than -r."""
+    shell = _logged_in_shell(tmp_path, monkeypatch)
+    File.create(tmp_path / "alice", "test")
+
+    shell.do_set_permissions("test user -x")
+
+    captured = capsys.readouterr()
+    assert "Invalid syntax" in captured.out
 
 
 # ---------------------------------------------------------------------------
