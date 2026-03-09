@@ -117,7 +117,7 @@ def test_set_permissions_not_owner(tmp_path, monkeypatch, capsys):
     bob_home = tmp_path / "bob"
     bob_home.mkdir(exist_ok=True)
     File.create(bob_home, "test")
-    
+
     # Try to set permissions from alice's directory
     shell.current_working_directory = bob_home
 
@@ -160,10 +160,10 @@ def test_get_permissions_after_set(tmp_path, monkeypatch, capsys):
     """get_permissions returns updated permission after set_permissions."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     File.create(tmp_path / "alice", "test")
-    
+
     shell.do_set_permissions("test group")
     capsys.readouterr()  # Clear output
-    
+
     shell.do_get_permissions("test")
 
     captured = capsys.readouterr()
@@ -204,7 +204,7 @@ def test_get_permissions_default_is_user(tmp_path, monkeypatch, capsys):
 def test_get_permissions_all_permission_types(tmp_path, monkeypatch, capsys):
     """get_permissions correctly returns all permission types."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    
+
     # Test user permission
     File.create(tmp_path / "alice", "file1")
     shell.do_set_permissions("file1 user")
@@ -212,7 +212,7 @@ def test_get_permissions_all_permission_types(tmp_path, monkeypatch, capsys):
     shell.do_get_permissions("file1")
     captured = capsys.readouterr()
     assert "user" in captured.out
-    
+
     # Test group permission
     File.create(tmp_path / "alice", "file2")
     shell.do_set_permissions("file2 group")
@@ -220,7 +220,7 @@ def test_get_permissions_all_permission_types(tmp_path, monkeypatch, capsys):
     shell.do_get_permissions("file2")
     captured = capsys.readouterr()
     assert "group" in captured.out
-    
+
     # Test all permission
     File.create(tmp_path / "alice", "file3")
     shell.do_set_permissions("file3 all")

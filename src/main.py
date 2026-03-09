@@ -332,7 +332,7 @@ class SecureFS(cmd.Cmd):
             file.rename_file(dest_name)
         except Exception as e:
             print(f"Error renaming file: {e}")
-            
+
     @requires_login
     def do_set_permissions(self, arg):
         """
@@ -345,9 +345,9 @@ class SecureFS(cmd.Cmd):
             return
 
         file_name, permissions = tokens
-        
+
         file_name = file_name.rstrip("/")
-        
+
         file_path = self.current_working_directory / (file_name + ".json")
 
         if not file_path.is_file():
@@ -359,11 +359,13 @@ class SecureFS(cmd.Cmd):
         ) and not file_path == FILES_DIR / (self.current_user["username"] + ".json"):
             print("Error: You are not the owner of this file.")
             return
-    
+
         if permissions not in {perm.value for perm in Permission}:
-            print("Error: Invalid permissions format. permissions values are 'user', 'group', or 'all'.")
+            print(
+                "Error: Invalid permissions format. permissions values are 'user', 'group', or 'all'."
+            )
             return
-    
+
         try:
             with open(file_path, "r") as f:
                 # TODO: actually decrypt the file contents instead of just printing the raw encrypted body
@@ -373,7 +375,7 @@ class SecureFS(cmd.Cmd):
                 json.dump(file_data, f, indent=4)
         except Exception as e:
             print(f"Error reading file: {e}")
-            
+
     @requires_login
     def do_get_permissions(self, arg):
         """
@@ -397,7 +399,6 @@ class SecureFS(cmd.Cmd):
                 print(permission)
         except Exception as e:
             print(f"Error reading file: {e}")
-
 
     @requires_admin
     def do_create_user(self, arg):
