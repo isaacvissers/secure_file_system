@@ -8,7 +8,7 @@ from backend.cryptography_utils import *
 from backend.group_utils import *
 from cli_utils import *
 from models.directory import Directory
-from models.file import File
+from models.file import File, Permission
 
 
 class SecureFS(cmd.Cmd):
@@ -332,6 +332,72 @@ class SecureFS(cmd.Cmd):
             file.rename_file(dest_name)
         except Exception as e:
             print(f"Error renaming file: {e}")
+            
+    @requires_login
+    def do_set_permissions(self, arg):
+        """
+        Usage: set_permissions <file_name> <permissions>
+        Permissions format: 'user', 'group', or 'all'
+        """
+        tokens = shlex.split(arg)
+        if len(tokens) != 2:
+            print("Error: Invalid syntax. Usage: chmod <file_name> <permissions>")
+            return
+
+        file_name, permissions = tokens
+        
+        file_name = file_name.rstrip("/")
+        
+        file_path = self.current_working_directory / (file_name + ".json")
+
+        if not file_path.is_file():
+            print(f"Error: File '{file_name}' does not exist.")
+            return
+
+        if not file_path.is_relative_to(
+            FILES_DIR / self.current_user["username"]
+        ) and not file_path == FILES_DIR / (self.current_user["username"] + ".json"):
+            print("Error: You are not the owner of this file.")
+            return
+    
+        if permissions not in {perm.value for perm in Permission}:
+            print("Error: Invalid permissions format. permissions values are 'user', 'group', or 'all'.")
+            return
+    
+        try:
+            with open(file_path, "r") as f:
+                # TODO: actually decrypt the file contents instead of just printing the raw encrypted body
+                file_data = json.load(f)
+                file_data["permission"] = permissions
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(file_data, f, indent=4)
+        except Exception as e:
+            print(f"Error reading file: {e}")
+            
+    @requires_login
+    def do_get_permissions(self, arg):
+        """
+        Usage: get_permissions <file_name>
+        """
+        if not arg.strip():
+            print("Error: File name is required.")
+            return
+
+        file_name = arg.strip()
+        file_path = self.current_working_directory / (file_name + ".json")
+
+        if not file_path.is_file():
+            print(f"Error: '{file_name}' is not a valid file.")
+            return
+
+        try:
+            with open(file_path, "r") as f:
+                file_data = json.load(f)
+                permission = file_data.get("permission", "unknown")
+                print(permission)
+        except Exception as e:
+            print(f"Error reading file: {e}")
+
 
     @requires_admin
     def do_create_user(self, arg):
