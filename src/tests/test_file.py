@@ -1,4 +1,5 @@
 import json
+import hashlib
 
 import pytest
 
@@ -90,6 +91,16 @@ def test_file_create_encrypted_fields_are_hex_strings(tmp_path):
     for field in ("encrypted_name", "encrypted_body", "encrypted_file_key"):
         # Should be a valid hex string (no exception)
         bytes.fromhex(data[field])
+
+
+def test_file_create_encrypted_name_is_deterministic_hash(tmp_path):
+    """encrypted_name is a deterministic one-way hash of file_name."""
+    File.create(tmp_path, "secret")
+    data = json.loads((tmp_path / "secret.json").read_text())
+
+    expected_hash = hashlib.sha256(data["file_name"].encode("utf-8")).hexdigest()
+
+    assert data["encrypted_name"] == expected_hash
 
 
 # ---------------------------------------------------------------------------

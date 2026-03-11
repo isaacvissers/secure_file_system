@@ -8,7 +8,7 @@ from backend.auth import _get_admin_or_fail, get_admin_record, load_user, save_u
 # --------------------
 
 
-def add_file_to_user(file_key: Any, username: str) -> bool:
+def add_file_to_user(file_name: Any, file_key: Any, username: str) -> bool:
     admin = _get_admin_or_fail()
     if not admin:
         return None
@@ -46,9 +46,10 @@ def add_file_to_user(file_key: Any, username: str) -> bool:
         # fallback to string representation
         fk = str(file_key)
 
-    file_keys = user.setdefault("file_keys", [])
-    if fk not in file_keys:
-        file_keys.append(fk)
+    # file_keys = user.setdefault("file_keys", [])
+    # if fk not in file_keys:
+    #     file_keys.append(fk)
+    user["file_keys"][file_name] = fk
 
     save_user(user_key, user)
 

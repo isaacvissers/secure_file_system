@@ -103,10 +103,7 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            directory = Directory.create(self.current_working_directory, directory_name)
-            add_file_to_user(
-                directory.metadata.encrypted_name, self.current_user.get("username")
-            )
+            Directory.create(self.current_working_directory, directory_name, self.current_user["username"])
             print(f"Directory '{directory_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -131,8 +128,7 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            file = File.create(self.current_working_directory, file_name)
-            add_file_to_user(file.encrypted_name, self.current_user["username"])
+            File.create(self.current_working_directory, file_name, self.current_user["username"])
             print(f"File '{file_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -195,6 +191,7 @@ class SecureFS(cmd.Cmd):
 
         print(pwd_str)
 
+
     @requires_login
     def do_cat(self, arg):
         """
@@ -212,17 +209,9 @@ class SecureFS(cmd.Cmd):
             return
 
         # TODO: ensure user has permission to read the file
-
-        try:
-            with open(file_path, "r") as f:
-                # TODO: actually decrypt the file contents instead of just printing the raw encrypted body
-                file_data = json.load(f)
-                if isinstance(file_data, dict) and "encrypted_body" in file_data:
-                    print(file_data["encrypted_body"])
-                else:
-                    print("Invalid file format: missing 'encrypted_body' field.")
-        except Exception as e:
-            print(f"Error reading file: {e}")
+        file_key = bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
+        file = File.get_file(file_path, file_key)
+        print(file.body)
 
     @requires_login
     def do_echo(self, arg):
@@ -288,7 +277,7 @@ class SecureFS(cmd.Cmd):
                 logical_name = (
                     file_name[:-5] if file_name.endswith(".json") else file_name
                 )
-                File.create(self.current_working_directory, logical_name)
+                File.create(self.current_working_directory, logical_name, self.current_user["username"])
 
             with open(file_path, "r", encoding="utf-8") as f:
                 file_data = json.load(f)
@@ -307,9 +296,6 @@ class SecureFS(cmd.Cmd):
 
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(file_data, f, indent=4)
-                add_file_to_user(
-                    file_data.get("encrypted_name"), self.current_user["username"]
-                )
 
         except Exception as e:
             print(f"Error writing to file: {e}")
