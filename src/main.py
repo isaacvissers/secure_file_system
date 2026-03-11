@@ -30,6 +30,17 @@ class SecureFS(cmd.Cmd):
         else:
             self.prompt = "SFS> "
 
+    def _refresh_current_user(self) -> None:
+        """Reload current user data from storage to keep in-memory state in sync."""
+        if not self.current_user:
+            return
+        username = self.current_user.get("username")
+        if not username:
+            return
+        refreshed_user = load_user(username)
+        if refreshed_user is not None:
+            self.current_user = refreshed_user
+
     @requires_logged_out
     def do_login(self, arg):
         """
@@ -129,6 +140,7 @@ class SecureFS(cmd.Cmd):
 
         try:
             File.create(self.current_working_directory, file_name, self.current_user["username"])
+            self._refresh_current_user()
             print(f"File '{file_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -278,6 +290,7 @@ class SecureFS(cmd.Cmd):
                     file_name[:-5] if file_name.endswith(".json") else file_name
                 )
                 File.create(self.current_working_directory, logical_name, self.current_user["username"])
+                self._refresh_current_user()
 
             with open(file_path, "r", encoding="utf-8") as f:
                 file_data = json.load(f)
@@ -321,11 +334,10 @@ class SecureFS(cmd.Cmd):
         if dest_path.exists():
             print(f"Error: Destination file '{dest_name}' already exists.")
             return
-        try:
-            file = File.get_file(source_path)
-            file.rename_file(dest_name)
-        except Exception as e:
-            print(f"Error renaming file: {e}")
+        file_key = bytes.fromhex(self.current_user["file_keys"].get(str(source_path)))
+        file = File.get_file(source_path, file_key)
+        file.rename_file(dest_name)
+        self._refresh_current_user()
 
     @requires_login
     def do_set_permissions(self, arg):
@@ -372,19 +384,15 @@ class SecureFS(cmd.Cmd):
             )
             return
 
-        try:
-            target_paths = [file_path]
-            if recursive and directory_path.is_dir():
-                target_paths.extend(directory_path.rglob("*.json"))
+        target_paths = [file_path]
+        if recursive and directory_path.is_dir():
+            target_paths.extend(directory_path.rglob("*.json"))
 
-            for target_path in target_paths:
-                with open(target_path, "r") as f:
-                    file_data = json.load(f)
-                    file_data["permission"] = permissions
-                with open(target_path, "w", encoding="utf-8") as f:
-                    json.dump(file_data, f, indent=4)
-        except Exception as e:
-            print(f"Error reading file: {e}")
+        for target_path in target_paths:
+            file_key = bytes.fromhex(self.current_user["file_keys"].get(str(target_path)))
+            file = File.get_file(target_path, file_key)
+            file.permission = Permission(permissions)
+            file.save(file_key)
 
     @requires_login
     def do_get_permissions(self, arg):
@@ -403,10 +411,9 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            with open(file_path, "r") as f:
-                file_data = json.load(f)
-                permission = file_data.get("permission", "unknown")
-                print(permission)
+            file_key = bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
+            file = File.get_file(file_path, file_key)
+            print(file.permission.value)
         except Exception as e:
             print(f"Error reading file: {e}")
 

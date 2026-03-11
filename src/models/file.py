@@ -7,8 +7,6 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from backend.auth import FILES_DIR
-
 
 class Permission(Enum):
     USER = "user"
@@ -27,7 +25,7 @@ class File:
     path: Path
 
     @classmethod
-    def create(cls, working_dir: Path, name: str, owner_name: str) -> "File":
+    def create(cls, working_dir: Path, name: str, owner_name: str, body: str = "", permission: Permission = Permission.USER) -> "File":
         """Create the file on disk as <name>.json and return a File instance."""
         # TODO: make sure we aren't creating files outside of the current user's directory
         # Maybe make sure you are the owner of the parent directory?
@@ -36,15 +34,15 @@ class File:
             raise FileExistsError(f"{path} already exists")
         file_key = AESGCM.generate_key(bit_length=256)
         # encrypted_name = hashlib.sha256(str(path).encode("utf-8")).digest()
-        encrypted_name = str(path.relative_to(FILES_DIR))  # TODO should be set to encrypted name
+        encrypted_name = str(path)  # TODO should be set to encrypted name
         instance = cls(
             file_name=name,  # TODO should be this be encrypted name?
             owner_name=owner_name,
-            permission=Permission.USER,  # Default permission
+            permission=permission,
             encrypted_name=encrypted_name,
-            body="",
+            body=body,
             encrypted_file_key=file_key,
-            path=path.relative_to(FILES_DIR),
+            path=path,
         )
         instance.save(file_key)
         from backend.file_utils import add_file_to_user
@@ -82,12 +80,23 @@ class File:
 
     def rename_file(self, new_name: str) -> None:
         """Rename the file on disk to <new_name>.json and change File instance to use updated name and path."""
-        new_path = self.path.parent / f"{new_name}.json"
-        if new_path.exists():
-            raise FileExistsError(f"{new_path} already exists")
-        # TODO this will have new encrypted name, need to clean up users, and groups that access this file too
-        self.path.rename(new_path)
-        self.file_name = new_name
+        # TODO we need to handle the case with directories afterwards
+        File.create(self.path.parent, new_name, self.owner_name, self.body, self.permission)
+        
+        # delete the old file
+        # TODO need to remove the file completely, which will require accessing user and groups
+        self.path.unlink()
+        # new_path = self.path.parent / f"{new_name}.json"
+        # if new_path.exists():
+        #     raise FileExistsError(f"{new_path} already exists")
+        # # TODO this will have new encrypted name, need to clean up users, and groups that access this file too
+        # self.path.rename(new_path)
+        # self.file_name = new_name
+
+        # from backend.file_utils import add_file_to_user
+        # add_file_to_user(str(new_path), self.encrypted_file_key, self.owner_name)
+
+        # self.save(self.encrypted_file_key)
 
     def to_json(self) -> str:
         """Convert the File instance to a JSON string."""
