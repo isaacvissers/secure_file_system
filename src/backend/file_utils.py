@@ -77,7 +77,9 @@ def _infer_file_name(file_name_or_key: Any) -> str:
     return _normalize_file_key(file_name_or_key)
 
 
-def add_file_to_user(file_name: Any, file_key: Any = None, username: str = None) -> bool:
+def add_file_to_user(
+    file_name: Any, file_key: Any = None, username: str = None
+) -> bool:
     """Normalize `file_key` and add it to the user's `file_keys` list."""
     if username is None:
         username = file_key
