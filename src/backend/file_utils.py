@@ -90,12 +90,10 @@ def add_file_to_user(file_name: Any, file_key: Any = None, username: str = None)
 
     user_key = getattr(admin, "user_keys", {}).get(username)
     if not user_key:
-        print(f"User '{username}' not found.")
         return False
 
     user = load_user(username)
     if not user:
-        print("User file not found.")
         return False
 
     if not isinstance(user.get("file_keys"), dict):
