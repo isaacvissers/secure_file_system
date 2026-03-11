@@ -275,7 +275,7 @@ class SecureFS(cmd.Cmd):
         if not file_name:
             print("Error: File name is required.")
             return
-        if not file_name.endswith(".json"):
+        if not file_name.endswith(".json"):  # TODO I think we should remove this what if the user wants a file called x.json
             file_name += ".json"
 
         file_path = self.current_working_directory / file_name
@@ -286,29 +286,34 @@ class SecureFS(cmd.Cmd):
         try:
             # TODO: decrypt body contents first, modify the decrypted content, then re-encrypt and write back to file instead of just writing raw output
             if not file_path.exists():
+                # TODO I think we need to rethink this part too
                 logical_name = (
                     file_name[:-5] if file_name.endswith(".json") else file_name
                 )
-                File.create(self.current_working_directory, logical_name, self.current_user["username"])
+                file = File.create(self.current_working_directory, logical_name, self.current_user["username"], body=output)
                 self._refresh_current_user()
+            else:
+                file = File.get_file(file_path, bytes.fromhex(self.current_user["file_keys"].get(str(file_path))))
+                file.body = file.body + output if append_mode else output
+                file.save(bytes.fromhex(self.current_user["file_keys"].get(str(file_path))))
 
-            with open(file_path, "r", encoding="utf-8") as f:
-                file_data = json.load(f)
+            # with open(file_path, "r", encoding="utf-8") as f:
+            #     file_data = json.load(f)
 
-            if not isinstance(file_data, dict) or "encrypted_body" not in file_data:
-                print("Invalid file format: missing 'encrypted_body' field.")
-                return
+            # if not isinstance(file_data, dict) or "encrypted_body" not in file_data:
+            #     print("Invalid file format: missing 'encrypted_body' field.")
+            #     return
 
-            existing_body = file_data.get("encrypted_body", "")
-            if not isinstance(existing_body, str):
-                existing_body = str(existing_body)
+            # existing_body = file_data.get("encrypted_body", "")
+            # if not isinstance(existing_body, str):
+            #     existing_body = str(existing_body)
 
-            file_data["encrypted_body"] = (
-                existing_body + output if append_mode else output
-            )
+            # file_data["encrypted_body"] = (
+            #     existing_body + output if append_mode else output
+            # )
 
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(file_data, f, indent=4)
+            # with open(file_path, "w", encoding="utf-8") as f:
+            #     json.dump(file_data, f, indent=4)
 
         except Exception as e:
             print(f"Error writing to file: {e}")
