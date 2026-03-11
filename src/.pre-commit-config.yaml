@@ -3,19 +3,20 @@ repos:
     rev: v2.3.0
     hooks:
     -   id: check-yaml
--   repo: https://github.com/psf/black
-    rev: 22.10.0
-    hooks:
-    -   id: black
+
 -   repo: https://github.com/PyCQA/isort
     rev: 5.12.0
     hooks:
     -   id: isort
         args: ["--profile", "black"]
+        files: \.py$
+
 -   repo: https://github.com/psf/black
     rev: 22.10.0
     hooks:
     -   id: black
+        files: \.py$
+
 -   repo: local
     hooks:
     -   id: pytest
