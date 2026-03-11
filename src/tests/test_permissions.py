@@ -1,9 +1,8 @@
-import json
-
 import main as main_module
 from main import SecureFS
 from models.directory import Directory
 from models.file import File
+from tests.encryption_helpers import load_tracked_file, track_file
 from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
@@ -32,39 +31,33 @@ def test_set_permissions_to_user(tmp_path, monkeypatch, capsys):
     """set_permissions successfully sets permission to 'user'."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = tmp_path / "alice" / "test.json"
-    File.create(tmp_path / "alice", "test")
+    track_file(shell, File.create(tmp_path / "alice", "test"))
 
     shell.do_set_permissions("test user")
 
-    with open(file_path, "r") as f:
-        file_data = json.load(f)
-        assert file_data["permission"] == "user"
+    assert load_tracked_file(shell, file_path).permission.value == "user"
 
 
 def test_set_permissions_to_group(tmp_path, monkeypatch, capsys):
     """set_permissions successfully sets permission to 'group'."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = tmp_path / "alice" / "test.json"
-    File.create(tmp_path / "alice", "test")
+    track_file(shell, File.create(tmp_path / "alice", "test"))
 
     shell.do_set_permissions("test group")
 
-    with open(file_path, "r") as f:
-        file_data = json.load(f)
-        assert file_data["permission"] == "group"
+    assert load_tracked_file(shell, file_path).permission.value == "group"
 
 
 def test_set_permissions_to_all(tmp_path, monkeypatch, capsys):
     """set_permissions successfully sets permission to 'all'."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = tmp_path / "alice" / "test.json"
-    File.create(tmp_path / "alice", "test")
+    track_file(shell, File.create(tmp_path / "alice", "test"))
 
     shell.do_set_permissions("test all")
 
-    with open(file_path, "r") as f:
-        file_data = json.load(f)
-        assert file_data["permission"] == "all"
+    assert load_tracked_file(shell, file_path).permission.value == "all"
 
 
 def test_set_permissions_file_not_found(tmp_path, monkeypatch, capsys):
@@ -80,7 +73,7 @@ def test_set_permissions_file_not_found(tmp_path, monkeypatch, capsys):
 def test_set_permissions_invalid_permission_value(tmp_path, monkeypatch, capsys):
     """set_permissions shows error for invalid permission value."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "test")
+    track_file(shell, File.create(tmp_path / "alice", "test"))
 
     shell.do_set_permissions("test invalid")
 
@@ -117,7 +110,7 @@ def test_set_permissions_not_owner(tmp_path, monkeypatch, capsys):
     # Create a file in bob's directory
     bob_home = tmp_path / "bob"
     bob_home.mkdir(exist_ok=True)
-    File.create(bob_home, "test")
+    File.create(bob_home, "test", "bob")
 
     # Try to set permissions from alice's directory
     shell.current_working_directory = bob_home
@@ -132,13 +125,11 @@ def test_set_permissions_strips_trailing_slash(tmp_path, monkeypatch, capsys):
     """set_permissions strips trailing slash from file name."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = tmp_path / "alice" / "test.json"
-    File.create(tmp_path / "alice", "test")
+    track_file(shell, File.create(tmp_path / "alice", "test"))
 
     shell.do_set_permissions("test/ user")
 
-    with open(file_path, "r") as f:
-        file_data = json.load(f)
-        assert file_data["permission"] == "user"
+    assert load_tracked_file(shell, file_path).permission.value == "user"
 
 
 def test_set_permissions_recursive_updates_subtree(tmp_path, monkeypatch, capsys):
@@ -146,10 +137,14 @@ def test_set_permissions_recursive_updates_subtree(tmp_path, monkeypatch, capsys
     shell = _logged_in_shell(tmp_path, monkeypatch)
     home = tmp_path / "alice"
 
-    Directory.create(home, "project")
-    File.create(home / "project", "readme")
-    Directory.create(home / "project", "docs")
-    File.create(home / "project" / "docs", "notes")
+    project = Directory.create(home, "project")
+    track_file(shell, project.metadata)
+    readme = File.create(home / "project", "readme")
+    track_file(shell, readme)
+    docs = Directory.create(home / "project", "docs")
+    track_file(shell, docs.metadata)
+    notes = File.create(home / "project" / "docs", "notes")
+    track_file(shell, notes)
 
     shell.do_set_permissions("project all -r")
 
@@ -159,9 +154,7 @@ def test_set_permissions_recursive_updates_subtree(tmp_path, monkeypatch, capsys
         home / "project" / "docs.json",
         home / "project" / "docs" / "notes.json",
     ]:
-        with open(path, "r") as f:
-            file_data = json.load(f)
-            assert file_data["permission"] == "all"
+        assert load_tracked_file(shell, path).permission.value == "all"
 
 
 def test_set_permissions_without_recursive_keeps_children(
@@ -171,21 +164,24 @@ def test_set_permissions_without_recursive_keeps_children(
     shell = _logged_in_shell(tmp_path, monkeypatch)
     home = tmp_path / "alice"
 
-    Directory.create(home, "project")
-    File.create(home / "project", "readme")
+    project = Directory.create(home, "project")
+    track_file(shell, project.metadata)
+    readme = File.create(home / "project", "readme")
+    track_file(shell, readme)
 
     shell.do_set_permissions("project group")
 
-    with open(home / "project.json", "r") as f:
-        assert json.load(f)["permission"] == "group"
-    with open(home / "project" / "readme.json", "r") as f:
-        assert json.load(f)["permission"] == "user"
+    assert load_tracked_file(shell, home / "project.json").permission.value == "group"
+    assert (
+        load_tracked_file(shell, home / "project" / "readme.json").permission.value
+        == "user"
+    )
 
 
 def test_set_permissions_invalid_third_argument(tmp_path, monkeypatch, capsys):
     """set_permissions rejects third args other than -r."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "test")
+    track_file(shell, File.create(tmp_path / "alice", "test"))
 
     shell.do_set_permissions("test user -x")
 
@@ -201,7 +197,7 @@ def test_set_permissions_invalid_third_argument(tmp_path, monkeypatch, capsys):
 def test_get_permissions_returns_user(tmp_path, monkeypatch, capsys):
     """get_permissions returns the permission value for a file."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "test")
+    track_file(shell, File.create(tmp_path / "alice", "test"))
 
     shell.do_get_permissions("test")
 
@@ -212,7 +208,7 @@ def test_get_permissions_returns_user(tmp_path, monkeypatch, capsys):
 def test_get_permissions_after_set(tmp_path, monkeypatch, capsys):
     """get_permissions returns updated permission after set_permissions."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "test")
+    track_file(shell, File.create(tmp_path / "alice", "test"))
 
     shell.do_set_permissions("test group")
     capsys.readouterr()  # Clear output
@@ -246,7 +242,7 @@ def test_get_permissions_no_filename(tmp_path, monkeypatch, capsys):
 def test_get_permissions_default_is_user(tmp_path, monkeypatch, capsys):
     """Newly created file has default permission 'user'."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "newfile")
+    track_file(shell, File.create(tmp_path / "alice", "newfile"))
 
     shell.do_get_permissions("newfile")
 
@@ -259,7 +255,7 @@ def test_get_permissions_all_permission_types(tmp_path, monkeypatch, capsys):
     shell = _logged_in_shell(tmp_path, monkeypatch)
 
     # Test user permission
-    File.create(tmp_path / "alice", "file1")
+    track_file(shell, File.create(tmp_path / "alice", "file1"))
     shell.do_set_permissions("file1 user")
     capsys.readouterr()  # Clear
     shell.do_get_permissions("file1")
@@ -267,7 +263,7 @@ def test_get_permissions_all_permission_types(tmp_path, monkeypatch, capsys):
     assert "user" in captured.out
 
     # Test group permission
-    File.create(tmp_path / "alice", "file2")
+    track_file(shell, File.create(tmp_path / "alice", "file2"))
     shell.do_set_permissions("file2 group")
     capsys.readouterr()  # Clear
     shell.do_get_permissions("file2")
@@ -275,7 +271,7 @@ def test_get_permissions_all_permission_types(tmp_path, monkeypatch, capsys):
     assert "group" in captured.out
 
     # Test all permission
-    File.create(tmp_path / "alice", "file3")
+    track_file(shell, File.create(tmp_path / "alice", "file3"))
     shell.do_set_permissions("file3 all")
     capsys.readouterr()  # Clear
     shell.do_get_permissions("file3")

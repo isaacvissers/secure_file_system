@@ -60,15 +60,18 @@ def test_directory_metadata_written_to_json(tmp_path):
 
 
 def test_directory_metadata_json_is_valid(tmp_path):
-    """The JSON metadata file contains valid JSON with expected keys."""
-    Directory.create(tmp_path, "archive")
-    data = json.loads((tmp_path / "archive.json").read_text())
+    """The encrypted metadata file decrypts to valid JSON with expected keys."""
+    directory = Directory.create(tmp_path, "archive")
+    loaded = File.get_file(
+        tmp_path / "archive.json", directory.metadata.encrypted_file_key
+    )
+    data = json.loads(loaded.to_json())
     for key in (
         "file_name",
         "owner_name",
         "permission",
         "encrypted_name",
-        "encrypted_body",
+        "body",
         "encrypted_file_key",
         "path",
     ):
@@ -76,10 +79,12 @@ def test_directory_metadata_json_is_valid(tmp_path):
 
 
 def test_directory_metadata_file_name_in_json(tmp_path):
-    """The JSON metadata file_name matches the directory name."""
-    Directory.create(tmp_path, "archive")
-    data = json.loads((tmp_path / "archive.json").read_text())
-    assert data["file_name"] == "archive"
+    """The decrypted metadata file_name matches the directory name."""
+    directory = Directory.create(tmp_path, "archive")
+    loaded = File.get_file(
+        tmp_path / "archive.json", directory.metadata.encrypted_file_key
+    )
+    assert loaded.file_name == "archive"
 
 
 def test_directory_metadata_permission_default(tmp_path):

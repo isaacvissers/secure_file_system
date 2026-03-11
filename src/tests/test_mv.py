@@ -1,6 +1,7 @@
 import main as main_module
 from main import SecureFS
 from models.file import File
+from tests.encryption_helpers import track_file
 from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
@@ -29,7 +30,7 @@ def _logged_in_shell(tmp_path, monkeypatch):
 def test_mv_renames_file_in_current_directory(tmp_path, monkeypatch):
     """mv renames a file within the current directory."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "old")
+    track_file(shell, File.create(tmp_path / "alice", "old"))
 
     shell.do_mv("old new")
 
@@ -50,8 +51,8 @@ def test_mv_errors_when_source_missing(tmp_path, monkeypatch, capsys):
 def test_mv_errors_when_destination_exists(tmp_path, monkeypatch, capsys):
     """mv prints an error when destination already exists."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "old")
-    File.create(tmp_path / "alice", "new")
+    track_file(shell, File.create(tmp_path / "alice", "old"))
+    track_file(shell, File.create(tmp_path / "alice", "new"))
 
     shell.do_mv("old new")
 
@@ -72,7 +73,7 @@ def test_mv_rejects_invalid_syntax(tmp_path, monkeypatch, capsys):
 def test_mv_supports_quoted_names_with_spaces(tmp_path, monkeypatch):
     """mv supports quoted source/destination names containing spaces."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "old name")
+    track_file(shell, File.create(tmp_path / "alice", "old name"))
 
     shell.do_mv('"old name" "new name"')
 
@@ -83,7 +84,7 @@ def test_mv_supports_quoted_names_with_spaces(tmp_path, monkeypatch):
 def test_mv_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, capsys):
     """mv currently appends .json, so passing .json in source should fail lookup."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "old")
+    track_file(shell, File.create(tmp_path / "alice", "old"))
 
     shell.do_mv("old.json new")
 
@@ -108,7 +109,7 @@ def test_mv_invalid_syntax_does_not_change_existing_files(
 ):
     """mv with invalid syntax should not alter files in cwd."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "old")
+    track_file(shell, File.create(tmp_path / "alice", "old"))
     original = sorted(p.name for p in (tmp_path / "alice").iterdir())
 
     shell.do_mv("old")

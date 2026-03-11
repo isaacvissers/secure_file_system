@@ -17,15 +17,22 @@ class Permission(Enum):
 @dataclass
 class File:
     file_name: str
-    owner_name: int
+    owner_name: str
     permission: Permission
-    encrypted_name: bytes
+    encrypted_name: str
     body: str
     encrypted_file_key: bytes
     path: Path
 
     @classmethod
-    def create(cls, working_dir: Path, name: str, owner_name: str, body: str = "", permission: Permission = Permission.USER) -> "File":
+    def create(
+        cls,
+        working_dir: Path,
+        name: str,
+        owner_name: str = "",
+        body: str = "",
+        permission: Permission = Permission.USER,
+    ) -> "File":
         """Create the file on disk as <name>.json and return a File instance."""
         # TODO: make sure we aren't creating files outside of the current user's directory
         # Maybe make sure you are the owner of the parent directory?
@@ -36,7 +43,7 @@ class File:
         # encrypted_name = hashlib.sha256(str(path).encode("utf-8")).digest()
         encrypted_name = str(path)  # TODO should be set to encrypted name
         instance = cls(
-            file_name=name,  # TODO should be this be encrypted name?
+            file_name=name,
             owner_name=owner_name,
             permission=permission,
             encrypted_name=encrypted_name,
