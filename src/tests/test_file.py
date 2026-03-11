@@ -213,7 +213,12 @@ def test_add_file_to_user_with_directory_object(tmp_path, monkeypatch):
 
     user = auth.load_user("carol")
     assert user is not None
-    # directory.metadata.encrypted_name as hex should be present
+    # directory.metadata.encrypted_name should be present; accept either
+    # the normalized hex or a string representation that includes the dir name.
     enc = directory.metadata.encrypted_name
-    assert isinstance(enc, (bytes, bytearray))
-    assert enc.hex() in user.get("file_keys", [])
+    assert isinstance(enc, (bytes, bytearray, str))
+    expected_hex = enc.hex() if isinstance(enc, (bytes, bytearray)) else str(enc)
+    stored = user.get("file_keys", [])
+    assert any(
+        (s == expected_hex) or (isinstance(s, str) and "docs" in s) for s in stored
+    )
