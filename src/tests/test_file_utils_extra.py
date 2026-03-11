@@ -1,5 +1,4 @@
 import json
-
 from pathlib import Path
 
 
@@ -11,7 +10,7 @@ def test_get_user_file_keys_and_add_file_to_group_propagation(tmp_path, monkeypa
         add_file_to_user_and_groups,
         get_user_file_keys,
     )
-    from backend.group_utils import create_group, add_user_to_group, load_group
+    from backend.group_utils import add_user_to_group, create_group, load_group
 
     users_dir = tmp_path / "users"
     files_dir = tmp_path / "files"
@@ -101,8 +100,8 @@ def test_add_file_to_user_accepts_directory_object(tmp_path, monkeypatch):
 def test_add_file_to_group_stores_hex_for_bytes(tmp_path, monkeypatch):
     """add_file_to_group should accept raw bytes and store a hex string in group file_access."""
     import backend.auth as auth
-    from backend.group_utils import create_group, load_group
     from backend.file_utils import add_file_to_group
+    from backend.group_utils import create_group, load_group
 
     users_dir = tmp_path / "users"
     files_dir = tmp_path / "files"

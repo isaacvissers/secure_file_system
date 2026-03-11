@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 import backend.auth as auth
 
@@ -148,6 +148,17 @@ def add_user_to_group(group_name: str, username: str) -> bool:
         return False
 
     _add_group_to_user(user, group_key)
+
+    # When a user is added to a group, also grant the group access to
+    # all files the user already owns. User records store normalized
+    # `file_keys`, so we can copy them directly into the group's
+    # `file_access` list without importing `file_utils` (avoids cycles).
+    user_file_keys = user.get("file_keys", [])
+    if user_file_keys:
+        fa = group.setdefault("file_access", [])
+        for fk in user_file_keys:
+            if fk not in fa:
+                fa.append(fk)
 
     save_group(group_key, group)
     auth.save_user(user_key, user)
