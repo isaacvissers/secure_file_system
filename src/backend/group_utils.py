@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import backend.auth as auth
 
@@ -88,6 +88,36 @@ def create_group(name: str) -> Optional[GroupsDict]:
 # --------------------
 
 
+def get_user_groups_by_username(username: str) -> List[str]:
+    admin = auth.get_admin_record()
+    if not admin:
+        print("Admin record not found.")
+        return []
+    user_key = admin.user_keys.get(username)
+    if not user_key:
+        print(f"User '{username}' not found.")
+        return []
+    user = auth.load_user(username)
+    if not user:
+        print("User file not found.")
+        return []
+    # Stored in the user record are group storage keys (e.g. 'group_p').
+    # Convert those to group names using the admin index so callers get
+    # human-readable group names.
+    user_gkeys = user.get("group_keys", [])
+    if not user_gkeys:
+        return []
+
+    # build reverse mapping group_key -> group_name
+    rev = {v: k for k, v in (admin.group_keys or {}).items()}
+    result: List[str] = []
+    for gk in user_gkeys:
+        name = rev.get(gk)
+        if name:
+            result.append(name)
+    return result
+
+
 def add_user_to_group(group_name: str, username: str) -> bool:
     admin = auth.get_admin_record()
     if not admin:
@@ -118,6 +148,17 @@ def add_user_to_group(group_name: str, username: str) -> bool:
         return False
 
     _add_group_to_user(user, group_key)
+
+    # When a user is added to a group, also grant the group access to
+    # all files the user already owns. User records store normalized
+    # `file_keys`, so we can copy them directly into the group's
+    # `file_access` list without importing `file_utils` (avoids cycles).
+    user_file_keys = user.get("file_keys", [])
+    if user_file_keys:
+        fa = group.setdefault("file_access", [])
+        for fk in user_file_keys:
+            if fk not in fa:
+                fa.append(fk)
 
     save_group(group_key, group)
     auth.save_user(user_key, user)

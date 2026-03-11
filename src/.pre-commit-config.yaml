@@ -7,6 +7,15 @@ repos:
     rev: 22.10.0
     hooks:
     -   id: black
+-   repo: https://github.com/PyCQA/isort
+    rev: 5.12.0
+    hooks:
+    -   id: isort
+        args: ["--profile", "black"]
+-   repo: https://github.com/psf/black
+    rev: 22.10.0
+    hooks:
+    -   id: black
 -   repo: local
     hooks:
     -   id: pytest
@@ -14,4 +23,3 @@ repos:
         entry: pytest -q
         language: system
         pass_filenames: false
-        stages: [commit, push]
