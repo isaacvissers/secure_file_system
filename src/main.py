@@ -6,12 +6,12 @@ from backend.auth import *
 from backend.auth import FILES_DIR
 from backend.cryptography_utils import *
 from backend.file_utils import *
+from backend.file_utils import add_file_to_group
 from backend.group_utils import *
+from backend.group_utils import get_user_groups_by_username
 from cli_utils import *
 from models.directory import Directory
 from models.file import File, Permission
-from backend.group_utils import get_user_groups_by_username
-from backend.file_utils import add_file_to_group
 
 
 class SecureFS(cmd.Cmd):
