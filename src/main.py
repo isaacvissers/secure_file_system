@@ -104,7 +104,7 @@ class SecureFS(cmd.Cmd):
 
         try:
             directory = Directory.create(self.current_working_directory, directory_name)
-            add_file_to_user_and_groups(
+            add_file_to_user(
                 directory.metadata.encrypted_name, self.current_user.get("username")
             )
             print(f"Directory '{directory_name}' created.")
@@ -132,7 +132,7 @@ class SecureFS(cmd.Cmd):
 
         try:
             file = File.create(self.current_working_directory, file_name)
-            add_file_to_user_and_groups(
+            add_file_to_user(
                 file.encrypted_name, self.current_user["username"]
             )
             print(f"File '{file_name}' created.")
@@ -309,7 +309,7 @@ class SecureFS(cmd.Cmd):
 
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(file_data, f, indent=4)
-                add_file_to_user_and_groups(
+                add_file_to_user(
                     file_data.get("encrypted_name"), self.current_user["username"]
                 )
 
@@ -383,6 +383,10 @@ class SecureFS(cmd.Cmd):
                 file_data["permission"] = permissions
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(file_data, f, indent=4)
+            if permissions == Permission.GROUP.value:
+                file_key = file_data.get("encrypted_name")
+                for g in get_user_groups_by_username(self.current_user["username"]):
+                    add_file_to_group(g, file_key)
         except Exception as e:
             print(f"Error reading file: {e}")
 
@@ -468,10 +472,6 @@ class SecureFS(cmd.Cmd):
         if not added_to_group:
             print(f"Failed to add user '{username}' to group '{group_name}'.")
             return
-
-        files = get_user_file_keys(username)
-        for file_key in files:
-            add_file_to_group(group_name, file_key)
 
         print(f"User '{username}' added to group '{group_name}'.")
 
