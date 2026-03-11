@@ -52,7 +52,10 @@ def test_echo_appends_to_file_with_double_redirect(tmp_path, monkeypatch):
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = tmp_path / "alice" / "notes.json"
 
-    track_file(shell, File.create(tmp_path / "alice", "notes", body="start\n"))
+    track_file(
+        shell,
+        File.create(tmp_path / "alice", "notes", "alice", body="start\n"),
+    )
 
     shell.do_echo("next >> notes")
 

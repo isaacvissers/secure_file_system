@@ -29,7 +29,7 @@ class File:
         cls,
         working_dir: Path,
         name: str,
-        owner_name: str = "",
+        owner_name: str,
         body: str = "",
         permission: Permission = Permission.USER,
     ) -> "File":
@@ -40,8 +40,7 @@ class File:
         if path.exists():
             raise FileExistsError(f"{path} already exists")
         file_key = AESGCM.generate_key(bit_length=256)
-        # encrypted_name = hashlib.sha256(str(path).encode("utf-8")).digest()
-        encrypted_name = str(path)  # TODO should be set to encrypted name
+        encrypted_name = hashlib.sha256(str(path).encode("utf-8")).hexdigest()
         instance = cls(
             file_name=name,
             owner_name=owner_name,
@@ -54,7 +53,7 @@ class File:
         instance.save(file_key)
         from backend.file_utils import add_file_to_user
 
-        add_file_to_user(encrypted_name, file_key, owner_name)
+        add_file_to_user(str(path), file_key, owner_name)
         return instance
 
     @classmethod

@@ -107,7 +107,10 @@ def test_create_user_creates_home_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
     monkeypatch.setattr(auth, "FILES_DIR", tmp_path)
 
+    auth.create_user(auth.ADMIN, auth.ADMIN, is_admin=True)
+
     user_dict = auth.create_user("tester", "password", is_admin=False)
+    assert user_dict is not None
 
     user_dir = tmp_path / "tester"
     assert user_dir.exists() and user_dir.is_dir()

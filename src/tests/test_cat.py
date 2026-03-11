@@ -30,7 +30,10 @@ def _logged_in_shell(tmp_path, monkeypatch):
 def test_cat_reads_file_body(tmp_path, monkeypatch, capsys):
     """cat prints the decrypted file body for a valid encrypted file."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(tmp_path / "alice", "notes", body="hello world"))
+    track_file(
+        shell,
+        File.create(tmp_path / "alice", "notes", "alice", body="hello world"),
+    )
 
     shell.do_cat("notes")
 
@@ -61,7 +64,7 @@ def test_cat_errors_for_missing_file(tmp_path, monkeypatch, capsys):
 def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
     """cat reports a read error when the session does not have the file key."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "broken", body="secret")
+    File.create(tmp_path / "alice", "broken", "alice", body="secret")
 
     shell.do_cat("broken")
 
@@ -72,7 +75,7 @@ def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
 def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, capsys):
     """cat currently appends .json, so passing .json in arg should fail lookup."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(tmp_path / "alice", "notes"))
+    track_file(shell, File.create(tmp_path / "alice", "notes", "alice"))
 
     shell.do_cat("notes.json")
 
@@ -95,7 +98,7 @@ def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
 def test_cat_prints_blank_line_for_empty_body(tmp_path, monkeypatch, capsys):
     """cat prints a newline when the decrypted body is empty."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(tmp_path / "alice", "empty"))
+    track_file(shell, File.create(tmp_path / "alice", "empty", "alice"))
 
     shell.do_cat("empty")
 

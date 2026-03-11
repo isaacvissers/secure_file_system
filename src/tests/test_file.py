@@ -12,40 +12,40 @@ def _load_created_file(file: File) -> File:
 
 
 def test_file_create_returns_file_instance(tmp_path):
-    f = File.create(tmp_path, "notes")
+    f = File.create(tmp_path, "notes", "owner")
     assert isinstance(f, File)
 
 
 def test_file_create_sets_file_name(tmp_path):
-    f = File.create(tmp_path, "notes")
+    f = File.create(tmp_path, "notes", "owner")
     assert f.file_name == "notes"
 
 
 def test_file_create_sets_path_to_json_file(tmp_path):
-    f = File.create(tmp_path, "notes")
+    f = File.create(tmp_path, "notes", "owner")
     assert f.path == tmp_path / "notes.json"
 
 
 def test_file_create_writes_file_to_disk(tmp_path):
-    File.create(tmp_path, "notes")
+    File.create(tmp_path, "notes", "owner")
     assert (tmp_path / "notes.json").exists()
 
 
 def test_file_create_writes_encrypted_payload(tmp_path):
-    f = File.create(tmp_path, "notes")
+    f = File.create(tmp_path, "notes", "owner")
     payload = f.path.read_bytes()
     assert len(payload) > 12
     assert payload != f.to_json().encode("utf-8")
 
 
 def test_file_create_can_be_loaded_from_disk(tmp_path):
-    f = File.create(tmp_path, "notes")
+    f = File.create(tmp_path, "notes", "owner")
     loaded = _load_created_file(f)
     assert loaded.file_name == "notes"
 
 
 def test_file_create_json_has_expected_keys(tmp_path):
-    f = File.create(tmp_path, "notes")
+    f = File.create(tmp_path, "notes", "owner")
     data = json.loads(f.to_json())
     for key in (
         "file_name",
@@ -60,18 +60,18 @@ def test_file_create_json_has_expected_keys(tmp_path):
 
 
 def test_file_create_json_file_name_matches(tmp_path):
-    f = File.create(tmp_path, "report")
+    f = File.create(tmp_path, "report", "owner")
     data = json.loads(f.to_json())
     assert data["file_name"] == "report"
 
 
 def test_file_create_default_permission_is_user(tmp_path):
-    f = File.create(tmp_path, "notes")
+    f = File.create(tmp_path, "notes", "owner")
     assert f.permission == Permission.USER
 
 
 def test_file_create_default_permission_in_json(tmp_path):
-    f = File.create(tmp_path, "notes")
+    f = File.create(tmp_path, "notes", "owner")
     data = json.loads(f.to_json())
     assert data["permission"] == "user"
 
@@ -79,41 +79,41 @@ def test_file_create_default_permission_in_json(tmp_path):
 def test_file_create_raises_when_file_already_exists(tmp_path):
     (tmp_path / "duplicate.json").write_bytes(b"{}")
     with pytest.raises(FileExistsError):
-        File.create(tmp_path, "duplicate")
+        File.create(tmp_path, "duplicate", "owner")
 
 
 def test_file_create_encrypted_fields_are_hex_strings(tmp_path):
-    f = File.create(tmp_path, "secret")
+    f = File.create(tmp_path, "secret", "owner")
     data = json.loads(f.to_json())
     bytes.fromhex(data["encrypted_name"])
     bytes.fromhex(data["encrypted_file_key"])
 
 
 def test_file_create_encrypted_name_is_deterministic_hash(tmp_path):
-    f = File.create(tmp_path, "secret")
+    f = File.create(tmp_path, "secret", "owner")
     expected_hash = hashlib.sha256(str(f.path).encode("utf-8")).hexdigest()
     assert f.encrypted_name == expected_hash
 
 
 def test_to_json_returns_string(tmp_path):
-    f = File.create(tmp_path, "doc")
+    f = File.create(tmp_path, "doc", "owner")
     assert isinstance(f.to_json(), str)
 
 
 def test_to_json_is_valid_json(tmp_path):
-    f = File.create(tmp_path, "doc")
+    f = File.create(tmp_path, "doc", "owner")
     data = json.loads(f.to_json())
     assert isinstance(data, dict)
 
 
 def test_to_json_file_name_matches(tmp_path):
-    f = File.create(tmp_path, "doc")
+    f = File.create(tmp_path, "doc", "owner")
     data = json.loads(f.to_json())
     assert data["file_name"] == "doc"
 
 
 def test_to_json_permission_is_serialised(tmp_path):
-    f = File.create(tmp_path, "doc")
+    f = File.create(tmp_path, "doc", "owner")
     data = json.loads(f.to_json())
     assert data["permission"] == f.permission.value
 

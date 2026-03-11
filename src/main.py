@@ -32,16 +32,28 @@ class SecureFS(cmd.Cmd):
         else:
             self.prompt = "SFS> "
 
-    def _refresh_current_user(self) -> None:
-        """Reload current user data from storage to keep in-memory state in sync."""
+    def _refresh_current_user(self, file_key_updates=None) -> None:
+        """Reload current user data from storage while preserving session state."""
         if not self.current_user:
             return
         username = self.current_user.get("username")
         if not username:
             return
+        current_user = dict(self.current_user)
+        if file_key_updates:
+            current_user.setdefault("file_keys", {}).update(file_key_updates)
+
         refreshed_user = load_user(username)
-        if refreshed_user is not None:
-            self.current_user = refreshed_user
+        if refreshed_user is None:
+            self.current_user = current_user
+            return
+
+        merged_user = {**current_user, **refreshed_user}
+        merged_user["file_keys"] = {
+            **current_user.get("file_keys", {}),
+            **refreshed_user.get("file_keys", {}),
+        }
+        self.current_user = merged_user
 
     @requires_logged_out
     def do_login(self, arg):
@@ -146,10 +158,10 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            File.create(
+            file = File.create(
                 self.current_working_directory, file_name, self.current_user["username"]
             )
-            self._refresh_current_user()
+            self._refresh_current_user({str(file.path): file.encrypted_file_key.hex()})
             print(f"File '{file_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -229,9 +241,13 @@ class SecureFS(cmd.Cmd):
             return
 
         # TODO: ensure user has permission to read the file
-        file_key = bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
-        file = File.get_file(file_path, file_key)
-        print(file.body)
+        try:
+            file_key_hex = self.current_user["file_keys"].get(str(file_path))
+            file_key = bytes.fromhex(file_key_hex)
+            file = File.get_file(file_path, file_key)
+            print(file.body)
+        except Exception as e:
+            print(f"Error reading file: {e}")
 
     @requires_login
     def do_echo(self, arg):
@@ -306,7 +322,9 @@ class SecureFS(cmd.Cmd):
                     self.current_user["username"],
                     body=output,
                 )
-                self._refresh_current_user()
+                self._refresh_current_user(
+                    {str(file.path): file.encrypted_file_key.hex()}
+                )
             else:
                 file = File.get_file(
                     file_path,
