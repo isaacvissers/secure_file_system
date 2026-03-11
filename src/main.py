@@ -132,9 +132,7 @@ class SecureFS(cmd.Cmd):
 
         try:
             file = File.create(self.current_working_directory, file_name)
-            add_file_to_user(
-                file.encrypted_name, self.current_user["username"]
-            )
+            add_file_to_user(file.encrypted_name, self.current_user["username"])
             print(f"File '{file_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
