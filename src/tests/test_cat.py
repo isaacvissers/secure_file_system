@@ -99,6 +99,7 @@ def test_cat_prints_blank_line_for_empty_body(tmp_path, monkeypatch, capsys):
     """cat prints a newline when the decrypted body is empty."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     track_file(shell, File.create(tmp_path / "alice", "empty", "alice"))
+    capsys.readouterr()
 
     shell.do_cat("empty")
 
