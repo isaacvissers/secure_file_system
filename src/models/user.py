@@ -6,7 +6,7 @@ from typing import Dict, List
 class User:
     username: str
     file_keys: Dict[str, str] = field(default_factory=dict)
-    group_keys: List[str] = field(default_factory=list)
+    group_keys: List[str] = field(default_factory=list) # TODO this needs to be a dict also
 
 
 @dataclass

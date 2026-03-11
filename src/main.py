@@ -107,6 +107,7 @@ class SecureFS(cmd.Cmd):
             print("Error: Directory name is required.")
             return
 
+        # TODO this check should be handled in the Directory.create method instead to ensure all directory creation is safe, not just creation through the CLI
         if not self.current_working_directory.is_relative_to(
             FILES_DIR / self.current_user["username"]
         ):

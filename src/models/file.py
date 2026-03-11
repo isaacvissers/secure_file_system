@@ -123,4 +123,4 @@ class File:
         data = self.to_json().encode("utf-8")
         nonce = os.urandom(12)
         encrypted_blob = AESGCM(file_key).encrypt(nonce, data, None)
-        self.path.write_bytes(nonce + encrypted_blob)
+        self.path.write_bytes(nonce + encrypted_blob) # TODO add integrity check here.
