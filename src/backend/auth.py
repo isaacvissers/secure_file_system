@@ -184,6 +184,11 @@ def create_user(
     if not is_admin:
         dir = create_user_directory(user_dict["username"])
 
+        if load_group("all") is None:
+            from backend.group_utils import create_group
+
+            create_group("all")
+
         added_to_group = add_user_to_group("all", username)
         if not added_to_group:
             print(f"Failed to add user '{username}' to group 'all'.")

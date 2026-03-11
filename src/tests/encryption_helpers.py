@@ -5,9 +5,9 @@ from models.file import File
 
 def track_file(shell, file: File) -> File:
     """Register a file key in the shell's in-memory user state for tests."""
-    shell.current_user.setdefault("file_keys", {})[str(file.path)] = (
-        file.encrypted_file_key.hex()
-    )
+    shell.current_user.setdefault("file_keys", {})[
+        str(file.path)
+    ] = file.encrypted_file_key.hex()
     return file
 
 

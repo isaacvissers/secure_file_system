@@ -10,6 +10,8 @@ from backend.group_utils import *
 from cli_utils import *
 from models.directory import Directory
 from models.file import File, Permission
+from backend.group_utils import get_user_groups_by_username
+from backend.file_utils import add_file_to_group
 
 
 class SecureFS(cmd.Cmd):
@@ -115,7 +117,11 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            Directory.create(self.current_working_directory, directory_name, self.current_user["username"])
+            Directory.create(
+                self.current_working_directory,
+                directory_name,
+                self.current_user["username"],
+            )
             print(f"Directory '{directory_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -140,7 +146,9 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            File.create(self.current_working_directory, file_name, self.current_user["username"])
+            File.create(
+                self.current_working_directory, file_name, self.current_user["username"]
+            )
             self._refresh_current_user()
             print(f"File '{file_name}' created.")
         except FileExistsError as e:
@@ -203,7 +211,6 @@ class SecureFS(cmd.Cmd):
             pwd_str = "SFS"
 
         print(pwd_str)
-
 
     @requires_login
     def do_cat(self, arg):
@@ -276,7 +283,9 @@ class SecureFS(cmd.Cmd):
         if not file_name:
             print("Error: File name is required.")
             return
-        if not file_name.endswith(".json"):  # TODO I think we should remove this what if the user wants a file called x.json
+        if not file_name.endswith(
+            ".json"
+        ):  # TODO I think we should remove this what if the user wants a file called x.json
             file_name += ".json"
 
         file_path = self.current_working_directory / file_name
@@ -291,12 +300,22 @@ class SecureFS(cmd.Cmd):
                 logical_name = (
                     file_name[:-5] if file_name.endswith(".json") else file_name
                 )
-                file = File.create(self.current_working_directory, logical_name, self.current_user["username"], body=output)
+                file = File.create(
+                    self.current_working_directory,
+                    logical_name,
+                    self.current_user["username"],
+                    body=output,
+                )
                 self._refresh_current_user()
             else:
-                file = File.get_file(file_path, bytes.fromhex(self.current_user["file_keys"].get(str(file_path))))
+                file = File.get_file(
+                    file_path,
+                    bytes.fromhex(self.current_user["file_keys"].get(str(file_path))),
+                )
                 file.body = file.body + output if append_mode else output
-                file.save(bytes.fromhex(self.current_user["file_keys"].get(str(file_path))))
+                file.save(
+                    bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
+                )
 
             # with open(file_path, "r", encoding="utf-8") as f:
             #     file_data = json.load(f)
@@ -395,10 +414,16 @@ class SecureFS(cmd.Cmd):
             target_paths.extend(directory_path.rglob("*.json"))
 
         for target_path in target_paths:
-            file_key = bytes.fromhex(self.current_user["file_keys"].get(str(target_path)))
+            file_key = bytes.fromhex(
+                self.current_user["file_keys"].get(str(target_path))
+            )
             file = File.get_file(target_path, file_key)
             file.permission = Permission(permissions)
             file.save(file_key)
+            if permissions == Permission.GROUP.value:
+                file_key = file.encrypted_file_key
+                for g in get_user_groups_by_username(self.current_user["username"]):
+                    add_file_to_group(g, file_key)
 
     @requires_login
     def do_get_permissions(self, arg):

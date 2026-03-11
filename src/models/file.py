@@ -88,8 +88,10 @@ class File:
     def rename_file(self, new_name: str) -> None:
         """Rename the file on disk to <new_name>.json and change File instance to use updated name and path."""
         # TODO we need to handle the case with directories afterwards
-        File.create(self.path.parent, new_name, self.owner_name, self.body, self.permission)
-        
+        File.create(
+            self.path.parent, new_name, self.owner_name, self.body, self.permission
+        )
+
         # delete the old file
         # TODO need to remove the file completely, which will require accessing user and groups
         self.path.unlink()
@@ -123,4 +125,4 @@ class File:
         data = self.to_json().encode("utf-8")
         nonce = os.urandom(12)
         encrypted_blob = AESGCM(file_key).encrypt(nonce, data, None)
-        self.path.write_bytes(nonce + encrypted_blob) # TODO add integrity check here.
+        self.path.write_bytes(nonce + encrypted_blob)  # TODO add integrity check here.

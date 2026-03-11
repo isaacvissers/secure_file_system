@@ -254,10 +254,8 @@ def test_multiple_users_added_to_all_group(tmp_path, monkeypatch):
         assert username in all_group["members"].values()
 
 
-def test_create_user_handles_missing_all_group_gracefully(
-    tmp_path, monkeypatch, capsys
-):
-    """Test that user creation handles missing 'all' group gracefully."""
+def test_create_user_creates_missing_all_group(tmp_path, monkeypatch):
+    """User creation auto-creates missing 'all' group and adds the user."""
     import backend.group_utils as group_utils
 
     users_dir = tmp_path / ".users"
@@ -286,6 +284,7 @@ def test_create_user_handles_missing_all_group_gracefully(
     # Attempt to create a user without "all" group existing
     user_dict = auth.create_user("testuser", "password", is_admin=False)
 
-    # This should fail or print an error message
-    captured = capsys.readouterr()
-    assert "Failed to add user" in captured.out or user_dict is None
+    assert user_dict is not None
+    all_group = group_utils.load_group("all")
+    assert all_group is not None
+    assert "testuser" in all_group["members"].values()
