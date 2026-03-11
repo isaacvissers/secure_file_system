@@ -2,4 +2,4 @@ cryptography
 pytest
 black
 isort
-pre-commit
+pre - commit
