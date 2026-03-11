@@ -10,6 +10,8 @@ from backend.group_utils import *
 from cli_utils import *
 from models.directory import Directory
 from models.file import File, Permission
+from backend.group_utils import get_user_groups_by_username
+from backend.file_utils import add_file_to_group
 
 
 class SecureFS(cmd.Cmd):
@@ -396,9 +398,11 @@ class SecureFS(cmd.Cmd):
                     file_data = json.load(f)
                     file_data["permission"] = permissions
                     if permissions == Permission.GROUP.value:
-                    file_key = file_data.get("encrypted_name")
-                    for g in get_user_groups_by_username(self.current_user["username"]):
-                        add_file_to_group(g, file_key)
+                        file_key = file_data.get("encrypted_name")
+                        for g in get_user_groups_by_username(
+                            self.current_user["username"]
+                        ):
+                            add_file_to_group(g, file_key)
                 with open(target_path, "w", encoding="utf-8") as f:
                     json.dump(file_data, f, indent=4)
         except Exception as e:
