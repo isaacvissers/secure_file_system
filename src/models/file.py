@@ -94,17 +94,6 @@ class File:
         # delete the old file
         # TODO need to remove the file completely, which will require accessing user and groups
         self.path.unlink()
-        # new_path = self.path.parent / f"{new_name}.json"
-        # if new_path.exists():
-        #     raise FileExistsError(f"{new_path} already exists")
-        # # TODO this will have new encrypted name, need to clean up users, and groups that access this file too
-        # self.path.rename(new_path)
-        # self.file_name = new_name
-
-        # from backend.file_utils import add_file_to_user
-        # add_file_to_user(str(new_path), self.encrypted_file_key, self.owner_name)
-
-        # self.save(self.encrypted_file_key)
 
     def to_json(self) -> str:
         """Convert the File instance to a JSON string."""

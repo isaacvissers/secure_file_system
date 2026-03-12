@@ -335,24 +335,6 @@ class SecureFS(cmd.Cmd):
                     bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
                 )
 
-            # with open(file_path, "r", encoding="utf-8") as f:
-            #     file_data = json.load(f)
-
-            # if not isinstance(file_data, dict) or "encrypted_body" not in file_data:
-            #     print("Invalid file format: missing 'encrypted_body' field.")
-            #     return
-
-            # existing_body = file_data.get("encrypted_body", "")
-            # if not isinstance(existing_body, str):
-            #     existing_body = str(existing_body)
-
-            # file_data["encrypted_body"] = (
-            #     existing_body + output if append_mode else output
-            # )
-
-            # with open(file_path, "w", encoding="utf-8") as f:
-            #     json.dump(file_data, f, indent=4)
-
         except Exception as e:
             print(f"Error writing to file: {e}")
 
