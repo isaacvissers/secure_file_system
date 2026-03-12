@@ -70,9 +70,7 @@ def test_set_permissions_file_not_found(tmp_path, monkeypatch, capsys):
     assert "does not exist" in captured.out
 
 
-def test_set_permissions_invalid_permission_value(
-    tmp_path, monkeypatch, capsys
-):
+def test_set_permissions_invalid_permission_value(tmp_path, monkeypatch, capsys):
     """set_permissions shows error for invalid permission value."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     track_file(shell, File.create(tmp_path / "alice", "test", "alice"))
@@ -134,9 +132,7 @@ def test_set_permissions_strips_trailing_slash(tmp_path, monkeypatch, capsys):
     assert load_tracked_file(shell, file_path).permission.value == "user"
 
 
-def test_set_permissions_recursive_updates_subtree(
-    tmp_path, monkeypatch, capsys
-):
+def test_set_permissions_recursive_updates_subtree(tmp_path, monkeypatch, capsys):
     """set_permissions with -r updates nested directory and file metadata."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     home = tmp_path / "alice"
@@ -175,13 +171,9 @@ def test_set_permissions_without_recursive_keeps_children(
 
     shell.do_set_permissions("project group")
 
+    assert load_tracked_file(shell, home / ".project").permission.value == "group"
     assert (
-        load_tracked_file(shell, home / ".project").permission.value
-        == "group"
-    )
-    assert (
-        load_tracked_file(shell, home / "project" / "readme").permission.value
-        == "user"
+        load_tracked_file(shell, home / "project" / "readme").permission.value == "user"
     )
 
 

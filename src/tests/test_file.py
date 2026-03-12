@@ -192,7 +192,4 @@ def test_add_file_to_user_with_directory_object(tmp_path, monkeypatch):
 
     user = auth.load_user("carol")
     assert user is not None
-    assert (
-        user.get("file_keys", {}).get("docs")
-        == directory.metadata.encrypted_name
-    )
+    assert user.get("file_keys", {}).get("docs") == directory.metadata.encrypted_name

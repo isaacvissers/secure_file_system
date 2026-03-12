@@ -135,7 +135,7 @@ class SecureFS(cmd.Cmd):
                 self.current_user["username"],
             )
             self._refresh_current_user()
-            
+
             print(f"Directory '{directory_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -385,25 +385,26 @@ class SecureFS(cmd.Cmd):
         file_name = file_name.rstrip("/")
 
         file_path = self.current_working_directory / file_name
-        
+
         if not file_path.exists():
             print(f"Error: File or directory '{file_name}' does not exist.")
             return
-        
-        if not file_path.is_relative_to(
-            FILES_DIR / self.current_user["username"]
-        ) and not file_path == FILES_DIR / self.current_user["username"]:
+
+        if (
+            not file_path.is_relative_to(FILES_DIR / self.current_user["username"])
+            and not file_path == FILES_DIR / self.current_user["username"]
+        ):
             print("Error: You are not the owner of this file.")
             return
-        
+
         if permissions not in {perm.value for perm in Permission}:
             print(
                 "Error: Invalid permissions format. permissions values are 'user', 'group', or 'all'."
             )
             return
-        
+
         target_paths = []
-        
+
         if not file_path.is_dir():
             target_paths.append(file_path)
         else:
@@ -415,9 +416,7 @@ class SecureFS(cmd.Cmd):
                 for nested_path in file_path.rglob("*"):
                     target_paths.append(nested_path)
                     if nested_path.is_dir():
-                        target_paths.append(
-                            nested_path.parent / f".{nested_path.name}"
-                        )
+                        target_paths.append(nested_path.parent / f".{nested_path.name}")
 
         target_paths = list(dict.fromkeys(target_paths))
 
@@ -446,7 +445,7 @@ class SecureFS(cmd.Cmd):
 
         file_name = arg.strip()
         file_path = self.current_working_directory / file_name
-        
+
         if file_path.is_dir():
             metadata_path = self.current_working_directory / f".{file_name}"
             if not metadata_path.exists():

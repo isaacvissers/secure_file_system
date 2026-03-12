@@ -62,9 +62,7 @@ def test_directory_metadata_written_to_dotfile(tmp_path):
 def test_directory_metadata_json_is_valid(tmp_path):
     """The encrypted metadata file decrypts to valid JSON."""
     directory = Directory.create(tmp_path, "archive", "owner")
-    loaded = File.get_file(
-        tmp_path / ".archive", directory.metadata.encrypted_file_key
-    )
+    loaded = File.get_file(tmp_path / ".archive", directory.metadata.encrypted_file_key)
     data = json.loads(loaded.to_json())
     for key in (
         "file_name",
@@ -81,9 +79,7 @@ def test_directory_metadata_json_is_valid(tmp_path):
 def test_directory_metadata_file_name_in_json(tmp_path):
     """The decrypted metadata file_name matches the directory name."""
     directory = Directory.create(tmp_path, "archive", "owner")
-    loaded = File.get_file(
-        tmp_path / ".archive", directory.metadata.encrypted_file_key
-    )
+    loaded = File.get_file(tmp_path / ".archive", directory.metadata.encrypted_file_key)
     assert loaded.file_name == ".archive"
 
 
