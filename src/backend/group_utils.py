@@ -163,11 +163,11 @@ def add_user_to_group(group_name: str, username: str) -> bool:
 def _add_member_to_group(group: dict, username: str, user_key: str) -> bool:
     members = group.setdefault("members", {})
 
-    if username in members:
+    if user_key in members:
         print("User already in group.")
         return False
 
-    members[username] = user_key
+    members[user_key] = username
     return True
 
 

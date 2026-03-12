@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from backend.cryptography_utils import *
-from backend.group_utils import load_group, save_group
+from backend.group_utils import add_user_to_group, load_group, save_group
 from models.directory import Directory
 from models.user import AdminUser, User
 
@@ -183,6 +183,16 @@ def create_user(
 
     if not is_admin:
         dir = create_user_directory(user_dict["username"])
+
+        if load_group("all") is None:
+            from backend.group_utils import create_group
+
+            create_group("all")
+
+        added_to_group = add_user_to_group("all", username)
+        if not added_to_group:
+            print(f"Failed to add user '{username}' to group 'all'.")
+            return
         try:
             from backend.file_utils import add_file_to_user
 

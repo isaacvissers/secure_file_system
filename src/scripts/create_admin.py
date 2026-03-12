@@ -13,6 +13,7 @@ from backend.auth import (
     get_admin_key,
     get_admin_record,
 )
+from backend.group_utils import create_group, load_group
 
 
 def ensure_admin_user(username: str, password: str, reset_password: bool = False):
@@ -47,6 +48,19 @@ def ensure_admin_user(username: str, password: str, reset_password: bool = False
     return admin.__dict__, "exists"
 
 
+def ensure_group(name: str):
+    """Ensure a group exists and return ('created' | 'exists' | 'missing')."""
+    existing = load_group(name)
+    if existing is not None:
+        return existing, "exists"
+
+    created = create_group(name)
+    if created is None:
+        return None, "missing"
+
+    return created, "created"
+
+
 def main() -> None:
     admin_data, status = ensure_admin_user(ADMIN, ADMIN)
     if status in {"created", "updated"}:
@@ -55,6 +69,14 @@ def main() -> None:
         print(f"Admin user already exists: {ADMIN}")
     else:
         print("Admin user record missing or corrupted.")
+
+    _, group_status = ensure_group("all")
+    if group_status == "created":
+        print("Group created: all")
+    elif group_status == "exists":
+        print("Group already exists: all")
+    else:
+        print("Group record missing or could not be created: all")
 
 
 if __name__ == "__main__":

@@ -132,15 +132,19 @@ def test_to_json_permission_is_serialised(tmp_path):
 def test_add_file_to_user_stores_hex_for_bytes(tmp_path, monkeypatch):
     """Passing raw bytes stores a hex string in the user's file_keys."""
     import backend.auth as auth
+    import backend.group_utils as group_utils
     from backend.file_utils import add_file_to_user
 
     # isolate storage to tmp_path
     users_dir = tmp_path / "users"
     files_dir = tmp_path / "files"
+    groups_dir = tmp_path / "groups"
     users_dir.mkdir()
     files_dir.mkdir()
+    groups_dir.mkdir()
     monkeypatch.setattr(auth, "USERS_DIR", users_dir)
     monkeypatch.setattr(auth, "FILES_DIR", files_dir)
+    monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
 
     # create an admin record so create_user can update the admin index
     admin_key = auth.get_admin_key()
@@ -151,6 +155,7 @@ def test_add_file_to_user_stores_hex_for_bytes(tmp_path, monkeypatch):
         "group_keys": {},
     }
     auth.save_user(admin_key, admin_record)
+    group_utils.create_group("all")
 
     # create a normal user
     created = auth.create_user("bob", "pw", is_admin=False)
@@ -170,15 +175,19 @@ def test_add_file_to_user_stores_hex_for_bytes(tmp_path, monkeypatch):
 def test_add_file_to_user_with_directory_object(tmp_path, monkeypatch):
     """Passing a Directory object stores its metadata.encrypted_name hex."""
     import backend.auth as auth
+    import backend.group_utils as group_utils
     from backend.file_utils import add_file_to_user
     from models.directory import Directory
 
     users_dir = tmp_path / "users"
     files_dir = tmp_path / "files"
+    groups_dir = tmp_path / "groups"
     users_dir.mkdir()
     files_dir.mkdir()
+    groups_dir.mkdir()
     monkeypatch.setattr(auth, "USERS_DIR", users_dir)
     monkeypatch.setattr(auth, "FILES_DIR", files_dir)
+    monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
 
     admin_key = auth.get_admin_key()
     admin_record = {
@@ -188,6 +197,7 @@ def test_add_file_to_user_with_directory_object(tmp_path, monkeypatch):
         "group_keys": {},
     }
     auth.save_user(admin_key, admin_record)
+    group_utils.create_group("all")
 
     created = auth.create_user("carol", "pw", is_admin=False)
     assert created is not None
