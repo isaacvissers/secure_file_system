@@ -1,8 +1,7 @@
-import json
-
 import main as main_module
 from main import SecureFS
 from models.file import File
+from tests.encryption_helpers import load_tracked_file, track_file
 from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
@@ -39,29 +38,29 @@ def test_echo_prints_to_stdout_without_redirect(tmp_path, monkeypatch, capsys):
 
 
 def test_echo_writes_to_file_with_overwrite_redirect(tmp_path, monkeypatch):
-    """echo > writes content into the file's encrypted_body field."""
+    """echo > writes content into the encrypted file body."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
 
     shell.do_echo("hello > notes")
 
-    data = json.loads((tmp_path / "alice" / "notes.json").read_text(encoding="utf-8"))
-    assert data["encrypted_body"] == "hello\n"
+    file = load_tracked_file(shell, tmp_path / "alice" / "notes.json")
+    assert file.body == "hello\n"
 
 
 def test_echo_appends_to_file_with_double_redirect(tmp_path, monkeypatch):
-    """echo >> appends to existing encrypted_body content."""
+    """echo >> appends to existing decrypted body content."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = tmp_path / "alice" / "notes.json"
 
-    File.create(tmp_path / "alice", "notes")
-    data = json.loads(file_path.read_text(encoding="utf-8"))
-    data["encrypted_body"] = "start\n"
-    file_path.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    track_file(
+        shell,
+        File.create(tmp_path / "alice", "notes", "alice", body="start\n"),
+    )
 
     shell.do_echo("next >> notes")
 
-    updated = json.loads(file_path.read_text(encoding="utf-8"))
-    assert updated["encrypted_body"] == "start\nnext\n"
+    updated = load_tracked_file(shell, file_path)
+    assert updated.body == "start\nnext\n"
 
 
 def test_echo_n_flag_suppresses_newline_stdout(tmp_path, monkeypatch, capsys):
@@ -90,8 +89,8 @@ def test_echo_accepts_explicit_json_target_name(tmp_path, monkeypatch):
 
     shell.do_echo("hello > notes.json")
 
-    data = json.loads((tmp_path / "alice" / "notes.json").read_text(encoding="utf-8"))
-    assert data["encrypted_body"] == "hello\n"
+    file = load_tracked_file(shell, tmp_path / "alice" / "notes.json")
+    assert file.body == "hello\n"
 
 
 def test_echo_blocked_when_not_logged_in(tmp_path, monkeypatch, capsys):
@@ -122,5 +121,5 @@ def test_echo_redirect_with_no_content_writes_newline(tmp_path, monkeypatch):
 
     shell.do_echo("> empty")
 
-    data = json.loads((tmp_path / "alice" / "empty.json").read_text(encoding="utf-8"))
-    assert data["encrypted_body"] == "\n"
+    file = load_tracked_file(shell, tmp_path / "alice" / "empty.json")
+    assert file.body == "\n"

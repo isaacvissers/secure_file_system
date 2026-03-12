@@ -84,7 +84,7 @@ def test_add_file_to_user_accepts_directory_object(tmp_path, monkeypatch):
 
     # create a directory object
     (files_dir / "carol").mkdir(exist_ok=True)
-    directory = Directory.create(files_dir / "carol", "docs")
+    directory = Directory.create(files_dir / "carol", "docs", "carol")
 
     assert add_file_to_user(directory, "carol") is True
     keys = get_user_file_keys("carol")

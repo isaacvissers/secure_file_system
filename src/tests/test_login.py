@@ -40,7 +40,12 @@ def _make_user(username="alice"):
 
 def _make_user_data(user_id: int = 1, username: str = "alice"):
     """Return a user dict including `user_id` and `username` for tests that need it."""
-    return {"user_id": user_id, "username": username}
+    return {
+        "user_id": user_id,
+        "username": username,
+        "file_keys": {},
+        "group_keys": [],
+    }
 
 
 # ---------------------------

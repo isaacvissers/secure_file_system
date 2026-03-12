@@ -170,7 +170,7 @@ def create_user(
     user_key = create_user_key(username, password)
     user_dict: UserDict = {
         "username": username,
-        "file_keys": [],
+        "file_keys": {},
         "group_keys": [],
     }
 
@@ -193,18 +193,12 @@ def create_user(
         if not added_to_group:
             print(f"Failed to add user '{username}' to group 'all'.")
             return
-        try:
-            from backend.file_utils import add_file_to_user
-
-            add_file_to_user(dir.metadata.encrypted_name, username)
-        except Exception:
-            pass
     return user_dict
 
 
 def create_user_directory(username: str) -> Path:
     """Create the home directory for a new user under FILES_DIR."""
-    return Directory.create(FILES_DIR, username)
+    return Directory.create(FILES_DIR, username, username)
 
 
 # --------------------

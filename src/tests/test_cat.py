@@ -1,8 +1,7 @@
-import json
-
 import main as main_module
 from main import SecureFS
 from models.file import File
+from tests.encryption_helpers import track_file
 from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
@@ -29,14 +28,12 @@ def _logged_in_shell(tmp_path, monkeypatch):
 
 
 def test_cat_reads_file_body(tmp_path, monkeypatch, capsys):
-    """cat prints the file's encrypted_body field for a valid file."""
+    """cat prints the decrypted file body for a valid encrypted file."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    file_path = tmp_path / "alice" / "notes.json"
-
-    File.create(tmp_path / "alice", "notes")
-    data = json.loads(file_path.read_text(encoding="utf-8"))
-    data["encrypted_body"] = "hello world"
-    file_path.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    track_file(
+        shell,
+        File.create(tmp_path / "alice", "notes", "alice", body="hello world"),
+    )
 
     shell.do_cat("notes")
 
@@ -64,22 +61,21 @@ def test_cat_errors_for_missing_file(tmp_path, monkeypatch, capsys):
     assert "not a valid file" in captured.out
 
 
-def test_cat_errors_when_file_missing_encrypted_body(tmp_path, monkeypatch, capsys):
-    """cat reports invalid format when encrypted_body key is absent."""
+def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
+    """cat reports a read error when the session does not have the file key."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    bad_file = tmp_path / "alice" / "broken.json"
-    bad_file.write_text(json.dumps({"file_name": "broken"}), encoding="utf-8")
+    File.create(tmp_path / "alice", "broken", "alice", body="secret")
 
     shell.do_cat("broken")
 
     captured = capsys.readouterr()
-    assert "Invalid file format" in captured.out
+    assert "Error reading file" in captured.out
 
 
 def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, capsys):
     """cat currently appends .json, so passing .json in arg should fail lookup."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "notes")
+    track_file(shell, File.create(tmp_path / "alice", "notes", "alice"))
 
     shell.do_cat("notes.json")
 
@@ -88,7 +84,7 @@ def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, c
 
 
 def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
-    """cat reports read errors when target file contains invalid JSON."""
+    """cat reports read errors when target file is not a valid encrypted payload."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     broken_file = tmp_path / "alice" / "broken.json"
     broken_file.write_text("{not-json", encoding="utf-8")
@@ -100,9 +96,10 @@ def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
 
 
 def test_cat_prints_blank_line_for_empty_body(tmp_path, monkeypatch, capsys):
-    """cat prints a newline when encrypted_body is an empty string."""
+    """cat prints a newline when the decrypted body is empty."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "empty")
+    track_file(shell, File.create(tmp_path / "alice", "empty", "alice"))
+    capsys.readouterr()
 
     shell.do_cat("empty")
 

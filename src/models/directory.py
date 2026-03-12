@@ -10,9 +10,9 @@ class Directory:
     path: Path
 
     @classmethod
-    def create(cls, working_dir: Path, name: str) -> "Directory":
+    def create(cls, working_dir: Path, name: str, owner_name: str) -> "Directory":
         """Create the directory on disk and return a Directory instance."""
-        metadata = File.create(working_dir, name)
+        metadata = File.create(working_dir, name, owner_name)
         path = working_dir / name
         if path.exists():
             raise FileExistsError(f"{path} already exists")

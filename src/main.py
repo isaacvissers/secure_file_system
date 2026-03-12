@@ -32,6 +32,29 @@ class SecureFS(cmd.Cmd):
         else:
             self.prompt = "SFS> "
 
+    def _refresh_current_user(self, file_key_updates=None) -> None:
+        """Reload current user data from storage while preserving session state."""
+        if not self.current_user:
+            return
+        username = self.current_user.get("username")
+        if not username:
+            return
+        current_user = dict(self.current_user)
+        if file_key_updates:
+            current_user.setdefault("file_keys", {}).update(file_key_updates)
+
+        refreshed_user = load_user(username)
+        if refreshed_user is None:
+            self.current_user = current_user
+            return
+
+        merged_user = {**current_user, **refreshed_user}
+        merged_user["file_keys"] = {
+            **current_user.get("file_keys", {}),
+            **refreshed_user.get("file_keys", {}),
+        }
+        self.current_user = merged_user
+
     @requires_logged_out
     def do_login(self, arg):
         """
@@ -98,6 +121,7 @@ class SecureFS(cmd.Cmd):
             print("Error: Directory name is required.")
             return
 
+        # TODO this check should be handled in the Directory.create method instead to ensure all directory creation is safe, not just creation through the CLI
         if not self.current_working_directory.is_relative_to(
             FILES_DIR / self.current_user["username"]
         ):
@@ -105,9 +129,10 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            directory = Directory.create(self.current_working_directory, directory_name)
-            add_file_to_user(
-                directory.metadata.encrypted_name, self.current_user.get("username")
+            Directory.create(
+                self.current_working_directory,
+                directory_name,
+                self.current_user["username"],
             )
             print(f"Directory '{directory_name}' created.")
         except FileExistsError as e:
@@ -133,8 +158,10 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            file = File.create(self.current_working_directory, file_name)
-            add_file_to_user(file.encrypted_name, self.current_user["username"])
+            file = File.create(
+                self.current_working_directory, file_name, self.current_user["username"]
+            )
+            self._refresh_current_user({str(file.path): file.encrypted_file_key.hex()})
             print(f"File '{file_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -214,15 +241,11 @@ class SecureFS(cmd.Cmd):
             return
 
         # TODO: ensure user has permission to read the file
-
         try:
-            with open(file_path, "r") as f:
-                # TODO: actually decrypt the file contents instead of just printing the raw encrypted body
-                file_data = json.load(f)
-                if isinstance(file_data, dict) and "encrypted_body" in file_data:
-                    print(file_data["encrypted_body"])
-                else:
-                    print("Invalid file format: missing 'encrypted_body' field.")
+            file_key_hex = self.current_user["file_keys"].get(str(file_path))
+            file_key = bytes.fromhex(file_key_hex)
+            file = File.get_file(file_path, file_key)
+            print(file.body)
         except Exception as e:
             print(f"Error reading file: {e}")
 
@@ -276,7 +299,9 @@ class SecureFS(cmd.Cmd):
         if not file_name:
             print("Error: File name is required.")
             return
-        if not file_name.endswith(".json"):
+        if not file_name.endswith(
+            ".json"
+        ):  # TODO I think we should remove this what if the user wants a file called x.json
             file_name += ".json"
 
         file_path = self.current_working_directory / file_name
@@ -287,30 +312,27 @@ class SecureFS(cmd.Cmd):
         try:
             # TODO: decrypt body contents first, modify the decrypted content, then re-encrypt and write back to file instead of just writing raw output
             if not file_path.exists():
+                # TODO I think we need to rethink this part too
                 logical_name = (
                     file_name[:-5] if file_name.endswith(".json") else file_name
                 )
-                File.create(self.current_working_directory, logical_name)
-
-            with open(file_path, "r", encoding="utf-8") as f:
-                file_data = json.load(f)
-
-            if not isinstance(file_data, dict) or "encrypted_body" not in file_data:
-                print("Invalid file format: missing 'encrypted_body' field.")
-                return
-
-            existing_body = file_data.get("encrypted_body", "")
-            if not isinstance(existing_body, str):
-                existing_body = str(existing_body)
-
-            file_data["encrypted_body"] = (
-                existing_body + output if append_mode else output
-            )
-
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(file_data, f, indent=4)
-                add_file_to_user(
-                    file_data.get("encrypted_name"), self.current_user["username"]
+                file = File.create(
+                    self.current_working_directory,
+                    logical_name,
+                    self.current_user["username"],
+                    body=output,
+                )
+                self._refresh_current_user(
+                    {str(file.path): file.encrypted_file_key.hex()}
+                )
+            else:
+                file = File.get_file(
+                    file_path,
+                    bytes.fromhex(self.current_user["file_keys"].get(str(file_path))),
+                )
+                file.body = file.body + output if append_mode else output
+                file.save(
+                    bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
                 )
 
         except Exception as e:
@@ -337,11 +359,10 @@ class SecureFS(cmd.Cmd):
         if dest_path.exists():
             print(f"Error: Destination file '{dest_name}' already exists.")
             return
-        try:
-            file = File.get_file(source_path)
-            file.rename_file(dest_name)
-        except Exception as e:
-            print(f"Error renaming file: {e}")
+        file_key = bytes.fromhex(self.current_user["file_keys"].get(str(source_path)))
+        file = File.get_file(source_path, file_key)
+        file.rename_file(dest_name)
+        self._refresh_current_user()
 
     @requires_login
     def do_set_permissions(self, arg):
@@ -388,25 +409,21 @@ class SecureFS(cmd.Cmd):
             )
             return
 
-        try:
-            target_paths = [file_path]
-            if recursive and directory_path.is_dir():
-                target_paths.extend(directory_path.rglob("*.json"))
+        target_paths = [file_path]
+        if recursive and directory_path.is_dir():
+            target_paths.extend(directory_path.rglob("*.json"))
 
-            for target_path in target_paths:
-                with open(target_path, "r") as f:
-                    file_data = json.load(f)
-                    file_data["permission"] = permissions
-                    if permissions == Permission.GROUP.value:
-                        file_key = file_data.get("encrypted_name")
-                        for g in get_user_groups_by_username(
-                            self.current_user["username"]
-                        ):
-                            add_file_to_group(g, file_key)
-                with open(target_path, "w", encoding="utf-8") as f:
-                    json.dump(file_data, f, indent=4)
-        except Exception as e:
-            print(f"Error reading file: {e}")
+        for target_path in target_paths:
+            file_key = bytes.fromhex(
+                self.current_user["file_keys"].get(str(target_path))
+            )
+            file = File.get_file(target_path, file_key)
+            file.permission = Permission(permissions)
+            file.save(file_key)
+            if permissions == Permission.GROUP.value:
+                file_key = file.encrypted_file_key
+                for g in get_user_groups_by_username(self.current_user["username"]):
+                    add_file_to_group(g, file_key)
 
     @requires_login
     def do_get_permissions(self, arg):
@@ -425,10 +442,9 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            with open(file_path, "r") as f:
-                file_data = json.load(f)
-                permission = file_data.get("permission", "unknown")
-                print(permission)
+            file_key = bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
+            file = File.get_file(file_path, file_key)
+            print(file.permission.value)
         except Exception as e:
             print(f"Error reading file: {e}")
 

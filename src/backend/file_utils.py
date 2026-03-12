@@ -26,6 +26,15 @@ def _normalize_file_key(file_key: Any) -> str:
     if isinstance(enc, str):
         return enc
 
+    # Directory-like object with metadata.encrypted_name
+    metadata = getattr(file_key, "metadata", None)
+    if metadata is not None:
+        nested = getattr(metadata, FILE_INDEX, None)
+        if isinstance(nested, (bytes, bytearray)):
+            return nested.hex()
+        if isinstance(nested, str):
+            return nested
+
     # Raw bytes passed directly
     if isinstance(file_key, (bytes, bytearray)):
         return file_key.hex()
@@ -44,30 +53,57 @@ def get_user_file_keys(username: str) -> list:
     if not user:
         print(f"User '{username}' not found.")
         return []
-    return user.get("file_keys", [])
+
+    file_keys = user.get("file_keys", [])
+    if isinstance(file_keys, dict):
+        return list(file_keys.values())
+    if isinstance(file_keys, list):
+        return file_keys
+    return [str(file_keys)]
 
 
-def add_file_to_user(file_key: Any, username: str) -> bool:
+def _infer_file_name(file_name_or_key: Any) -> str:
+    """Return a stable mapping key for storing a user's file key."""
+    path = getattr(file_name_or_key, "path", None)
+    if path is not None:
+        return str(path)
+
+    metadata = getattr(file_name_or_key, "metadata", None)
+    if metadata is not None:
+        metadata_path = getattr(metadata, "path", None)
+        if metadata_path is not None:
+            return str(metadata_path)
+
+    return _normalize_file_key(file_name_or_key)
+
+
+def add_file_to_user(
+    file_name: Any, file_key: Any = None, username: str = None
+) -> bool:
     """Normalize `file_key` and add it to the user's `file_keys` list."""
+    if username is None:
+        username = file_key
+        file_key = file_name
+        file_name = _infer_file_name(file_key)
+
     admin = _get_admin_or_fail()
     if not admin:
         return None
 
     user_key = getattr(admin, "user_keys", {}).get(username)
     if not user_key:
-        print(f"User '{username}' not found.")
         return False
 
     user = load_user(username)
     if not user:
-        print("User file not found.")
         return False
 
+    if not isinstance(user.get("file_keys"), dict):
+        user["file_keys"] = {}
+
     fk = _normalize_file_key(file_key)
-    user.setdefault("file_keys", [])
-    if fk not in user["file_keys"]:
-        user["file_keys"].append(fk)
-        save_user(user_key, user)
+    user["file_keys"][file_name] = fk
+    save_user(user_key, user)
 
     return True
 
