@@ -73,7 +73,7 @@ def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
 
 
 def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, capsys):
-    """cat currently appends .json, so passing .json in arg should fail lookup."""
+    """cat treats a .json suffix literally when looking up the path."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     track_file(shell, File.create(tmp_path / "alice", "notes", "alice"))
 
@@ -86,7 +86,7 @@ def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, c
 def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
     """cat reports read errors when target file is not a valid encrypted payload."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    broken_file = tmp_path / "alice" / "broken.json"
+    broken_file = tmp_path / "alice" / "broken"
     broken_file.write_text("{not-json", encoding="utf-8")
 
     shell.do_cat("broken")

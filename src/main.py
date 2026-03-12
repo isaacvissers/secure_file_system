@@ -407,11 +407,19 @@ class SecureFS(cmd.Cmd):
         if not file_path.is_dir():
             target_paths.append(file_path)
         else:
-            metadata_path = self.current_working_directory / f".{file_name}"
+            metadata_path = file_path.parent / f".{file_path.name}"
             target_paths.append(metadata_path)
             if recursive:
-                # Add all files in the directory and subdirectories to target_paths
-                target_paths.extend(file_path.rglob("*"))
+                # Add all files in the directory tree, including metadata dotfiles
+                # for nested directories.
+                for nested_path in file_path.rglob("*"):
+                    target_paths.append(nested_path)
+                    if nested_path.is_dir():
+                        target_paths.append(
+                            nested_path.parent / f".{nested_path.name}"
+                        )
+
+        target_paths = list(dict.fromkeys(target_paths))
 
         for target_path in target_paths:
             if target_path.is_dir():

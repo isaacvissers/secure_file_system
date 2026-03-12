@@ -45,53 +45,51 @@ def test_ls_shows_directory_with_trailing_slash(tmp_path, monkeypatch, capsys):
     assert "docs/" in captured.out
 
 
-def test_ls_shows_file_without_json_extension(tmp_path, monkeypatch, capsys):
-    """ls strips the .json extension when displaying files."""
+def test_ls_shows_plain_file_name(tmp_path, monkeypatch, capsys):
+    """ls prints plain file names as-is."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    (tmp_path / "alice" / "notes.json").write_text("{}")
+    (tmp_path / "alice" / "notes").write_text("{}")
 
     shell.do_ls("")
 
     captured = capsys.readouterr()
     assert "notes" in captured.out
-    assert "notes.json" not in captured.out
 
 
-def test_ls_hides_json_file_when_matching_directory_exists(
+def test_ls_hides_directory_metadata_file_when_matching_directory_exists(
     tmp_path, monkeypatch, capsys
 ):
-    """ls hides a .json file when a directory with the same stem exists."""
+    """ls hides a dotfile metadata entry when a matching directory exists."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     (tmp_path / "alice" / "docs").mkdir()
-    (tmp_path / "alice" / "docs.json").write_text("{}")
+    (tmp_path / "alice" / ".docs").write_text("{}")
 
     shell.do_ls("")
 
     captured = capsys.readouterr()
     assert "docs/" in captured.out
-    assert "docs.json" not in captured.out
+    assert ".docs" not in captured.out
     # 'docs' should appear exactly once (as the directory)
     assert captured.out.count("docs") == 1
 
 
-def test_ls_shows_json_file_without_matching_directory(tmp_path, monkeypatch, capsys):
-    """ls shows a .json file (without extension) when no matching directory exists."""
+def test_ls_shows_plain_file_without_matching_directory(tmp_path, monkeypatch, capsys):
+    """ls shows a regular file when no matching directory exists."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    (tmp_path / "alice" / "report.json").write_text("{}")
+    (tmp_path / "alice" / "report").write_text("{}")
 
     shell.do_ls("")
 
     captured = capsys.readouterr()
     assert "report" in captured.out
-    assert "report.json" not in captured.out
 
 
 def test_ls_mixed_entries(tmp_path, monkeypatch, capsys):
     """ls correctly handles a mix of directories and files."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     (tmp_path / "alice" / "images").mkdir()
-    (tmp_path / "alice" / "images.json").write_text("{}")  # should be hidden
-    (tmp_path / "alice" / "readme.json").write_text("{}")  # should appear as 'readme'
+    (tmp_path / "alice" / ".images").write_text("{}")  # should be hidden
+    (tmp_path / "alice" / "readme").write_text("{}")
 
     shell.do_ls("")
 
@@ -99,16 +97,14 @@ def test_ls_mixed_entries(tmp_path, monkeypatch, capsys):
     lines = captured.out.splitlines()
     assert "images/" in lines
     assert "readme" in lines
-    assert "images.json" not in captured.out
-    # images.json must NOT appear as a standalone entry (only as "images/")
-    assert not any(l.strip() == "images" for l in lines)
+    assert ".images" not in captured.out
 
 
 def test_ls_multiple_files(tmp_path, monkeypatch, capsys):
-    """ls lists all files (stripped of .json) when no matching directories exist."""
+    """ls lists all plain files when no matching directories exist."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     for name in ("alpha", "beta", "gamma"):
-        (tmp_path / "alice" / f"{name}.json").write_text("{}")
+        (tmp_path / "alice" / name).write_text("{}")
 
     shell.do_ls("")
 
@@ -139,11 +135,10 @@ def test_ls_works_in_subdirectory(tmp_path, monkeypatch, capsys):
     shell = _logged_in_shell(tmp_path, monkeypatch)
     subdir = tmp_path / "alice" / "projects"
     subdir.mkdir()
-    (subdir / "plan.json").write_text("{}")
+    (subdir / "plan").write_text("{}")
     shell.current_working_directory = subdir
 
     shell.do_ls("")
 
     captured = capsys.readouterr()
     assert "plan" in captured.out
-    assert "plan.json" not in captured.out

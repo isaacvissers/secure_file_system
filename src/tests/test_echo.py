@@ -43,14 +43,14 @@ def test_echo_writes_to_file_with_overwrite_redirect(tmp_path, monkeypatch):
 
     shell.do_echo("hello > notes")
 
-    file = load_tracked_file(shell, tmp_path / "alice" / "notes.json")
+    file = load_tracked_file(shell, tmp_path / "alice" / "notes")
     assert file.body == "hello\n"
 
 
 def test_echo_appends_to_file_with_double_redirect(tmp_path, monkeypatch):
     """echo >> appends to existing decrypted body content."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    file_path = tmp_path / "alice" / "notes.json"
+    file_path = tmp_path / "alice" / "notes"
 
     track_file(
         shell,
@@ -83,13 +83,13 @@ def test_echo_rejects_invalid_redirect_syntax(tmp_path, monkeypatch, capsys):
     assert "Invalid syntax" in captured.out
 
 
-def test_echo_accepts_explicit_json_target_name(tmp_path, monkeypatch):
-    """echo keeps an explicit .json target name without duplicating suffix."""
+def test_echo_preserves_explicit_target_name(tmp_path, monkeypatch):
+    """echo preserves an explicit target name literally."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
 
-    shell.do_echo("hello > notes.json")
+    shell.do_echo("hello > notes.backup")
 
-    file = load_tracked_file(shell, tmp_path / "alice" / "notes.json")
+    file = load_tracked_file(shell, tmp_path / "alice" / "notes.backup")
     assert file.body == "hello\n"
 
 
@@ -121,5 +121,5 @@ def test_echo_redirect_with_no_content_writes_newline(tmp_path, monkeypatch):
 
     shell.do_echo("> empty")
 
-    file = load_tracked_file(shell, tmp_path / "alice" / "empty.json")
+    file = load_tracked_file(shell, tmp_path / "alice" / "empty")
     assert file.body == "\n"
