@@ -331,9 +331,7 @@ class SecureFS(cmd.Cmd):
                     bytes.fromhex(self.current_user["file_keys"].get(str(file_path))),
                 )
                 file.body = file.body + output if append_mode else output
-                file.save(
-                    bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
-                )
+                file.save()
 
         except Exception as e:
             print(f"Error writing to file: {e}")
@@ -419,7 +417,7 @@ class SecureFS(cmd.Cmd):
             )
             file = File.get_file(target_path, file_key)
             file.permission = Permission(permissions)
-            file.save(file_key)
+            file.save()
             if permissions == Permission.GROUP.value:
                 file_key = file.encrypted_file_key
                 for g in get_user_groups_by_username(self.current_user["username"]):

@@ -50,7 +50,7 @@ class File:
             encrypted_file_key=file_key,
             path=path,
         )
-        instance.save(file_key)
+        instance.save()
         from backend.file_utils import add_file_to_user
 
         add_file_to_user(str(path), file_key, owner_name)
@@ -108,9 +108,9 @@ class File:
         }
         return json.dumps(data, indent=4)
 
-    def save(self, file_key: bytes) -> None:
+    def save(self) -> None:
         """Save the File instance encrypted as nonce + ciphertext at its path."""
         data = self.to_json().encode("utf-8")
         nonce = os.urandom(12)
-        encrypted_blob = AESGCM(file_key).encrypt(nonce, data, None)
+        encrypted_blob = AESGCM(self.encrypted_file_key).encrypt(nonce, data, None)
         self.path.write_bytes(nonce + encrypted_blob)  # TODO add integrity check here.
