@@ -33,10 +33,10 @@ class File:
         body: str = "",
         permission: Permission = Permission.USER,
     ) -> "File":
-        """Create the file on disk as <name>.json and return a File instance."""
+        """Create the file on disk as <name> and return a File instance."""
         # TODO: make sure we aren't creating files outside of the current user's directory
         # Maybe make sure you are the owner of the parent directory?
-        path = working_dir / f"{name}.json"
+        path = working_dir / f"{name}"
         if path.exists():
             raise FileExistsError(f"{path} already exists")
         file_key = AESGCM.generate_key(bit_length=256)
@@ -85,7 +85,7 @@ class File:
         )
 
     def rename_file(self, new_name: str) -> None:
-        """Rename the file on disk to <new_name>.json and change File instance to use updated name and path."""
+        """Rename the file on disk to <new_name> and change File instance to use updated name and path."""
         # TODO we need to handle the case with directories afterwards
         File.create(
             self.path.parent, new_name, self.owner_name, self.body, self.permission

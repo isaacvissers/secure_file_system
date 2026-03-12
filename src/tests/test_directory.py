@@ -49,13 +49,13 @@ def test_directory_create_attaches_metadata(tmp_path):
 def test_directory_metadata_file_name(tmp_path):
     """Directory metadata records the directory name."""
     d = Directory.create(tmp_path, "docs", "owner")
-    assert d.metadata.file_name == "docs"
+    assert d.metadata.file_name == "dir_docs"
 
 
 def test_directory_metadata_written_to_json(tmp_path):
     """Directory.create() writes a JSON metadata file alongside the directory."""
     Directory.create(tmp_path, "archive", "owner")
-    meta_file = tmp_path / "archive.json"
+    meta_file = tmp_path / "dir_archive"
     assert meta_file.exists()
 
 
@@ -63,7 +63,7 @@ def test_directory_metadata_json_is_valid(tmp_path):
     """The encrypted metadata file decrypts to valid JSON with expected keys."""
     directory = Directory.create(tmp_path, "archive", "owner")
     loaded = File.get_file(
-        tmp_path / "archive.json", directory.metadata.encrypted_file_key
+        tmp_path / "dir_archive", directory.metadata.encrypted_file_key
     )
     data = json.loads(loaded.to_json())
     for key in (
