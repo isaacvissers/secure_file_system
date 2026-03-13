@@ -1,4 +1,5 @@
 import cmd
+import hashlib
 import json
 import shlex
 
@@ -36,14 +37,46 @@ class SecureFS(cmd.Cmd):
         self.admin_cache = admin
         return self.admin_cache
 
-    def _update_prompt(self):
-        """Update the interactive prompt to include the logged-in username."""
-        if (
+    def _build_displayed_path(self):
+        """Return cwd path under FILES_DIR with decrypted names when available."""
+        if not (
             self.current_working_directory
             and self.current_working_directory.is_relative_to(FILES_DIR)
         ):
-            relative_path = self.current_working_directory.relative_to(FILES_DIR)
-            self.prompt = f"SFS/{relative_path}> "
+            return None
+
+        relative_path = self.current_working_directory.relative_to(FILES_DIR)
+        base_dir = FILES_DIR
+        displayed_path = ""
+
+        for part in relative_path.parts:
+            metadata_path = base_dir / f".{part}"
+            if metadata_path.exists():
+                try:
+                    file_key_hex = self.current_user["file_keys"].get(
+                        str(metadata_path)
+                    )
+                    if file_key_hex:
+                        file_key = bytes.fromhex(file_key_hex)
+                        metadata_file = File.get_file(metadata_path, file_key)
+                        decrypted_name = metadata_file.file_name.lstrip(".")
+                        displayed_path += f"/{decrypted_name}"
+                    else:
+                        displayed_path += f"/{part}"
+                except Exception:
+                    displayed_path += f"/{part}"
+            else:
+                displayed_path += f"/{part}"
+
+            base_dir = base_dir / part
+
+        return displayed_path
+
+    def _update_prompt(self):
+        """Update the interactive prompt to include the logged-in username."""
+        displayed_path = self._build_displayed_path()
+        if displayed_path is not None:
+            self.prompt = f"SFS{displayed_path}> "
         else:
             self.prompt = "SFS> "
 
@@ -94,7 +127,9 @@ class SecureFS(cmd.Cmd):
                 return
             self.current_user = admin
             # set working directory for admin session
-            self.current_working_directory = FILES_DIR / username
+            self.current_working_directory = (
+                FILES_DIR / hashlib.sha256(username.encode("utf-8")).hexdigest()
+            )
         else:
             user_key, user_dict = auth._resolve_user(admin, username)
             if not user_dict:
@@ -108,7 +143,9 @@ class SecureFS(cmd.Cmd):
 
             self.current_user = user_dict
             # set working directory to the user's files directory
-            self.current_working_directory = FILES_DIR / username
+            self.current_working_directory = (
+                FILES_DIR / hashlib.sha256(username.encode("utf-8")).hexdigest()
+            )
 
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
@@ -138,7 +175,8 @@ class SecureFS(cmd.Cmd):
 
         # TODO this check should be handled in the Directory.create method instead to ensure all directory creation is safe, not just creation through the CLI
         if not self.current_working_directory.is_relative_to(
-            FILES_DIR / self.current_user["username"]
+            FILES_DIR
+            / hashlib.sha256(self.current_user["username"].encode("utf-8")).hexdigest()
         ):
             print("Error: Cannot create directories outside of your home directory.")
             return
@@ -169,7 +207,8 @@ class SecureFS(cmd.Cmd):
             return
 
         if not self.current_working_directory.is_relative_to(
-            FILES_DIR / self.current_user["username"]
+            FILES_DIR
+            / hashlib.sha256(self.current_user["username"].encode("utf-8")).hexdigest()
         ):
             print("Error: Cannot create files outside of your home directory.")
             return
@@ -192,14 +231,32 @@ class SecureFS(cmd.Cmd):
             directory_name = arg.strip()
         else:
             # go to users home directory if no argument provided
-            self.current_working_directory = FILES_DIR / self.current_user["username"]
+            self.current_working_directory = (
+                FILES_DIR
+                / hashlib.sha256(
+                    self.current_user["username"].encode("utf-8")
+                ).hexdigest()
+            )
             self._update_prompt()
+            return
+        if directory_name in {".", "./"}:
+            return
+        elif directory_name in {"..", "../"}:
+            parent_dir = self.current_working_directory.parent
+            if parent_dir.is_relative_to(FILES_DIR) or parent_dir == (FILES_DIR):
+                self.current_working_directory = parent_dir
+                self._update_prompt()
+            else:
+                print("Error: Access outside of storage is not allowed.")
             return
         if directory_name is None:
             print("Error: Directory name is required.")
             return
 
-        new_path = (self.current_working_directory / directory_name).resolve()
+        new_path = (
+            self.current_working_directory
+            / hashlib.sha256(directory_name.encode("utf-8")).hexdigest()
+        ).resolve()
         if not new_path.is_relative_to(FILES_DIR.resolve()):
             print("Error: Access outside of storage is not allowed.")
             return
@@ -219,25 +276,52 @@ class SecureFS(cmd.Cmd):
         dir_names = {e.name for e in entries if e.is_dir()}
         for entry in entries:
             if entry.is_dir():
-                print(f"{entry.name}/")
+                metadata_path = self.current_working_directory / f".{entry.name}"
+                if metadata_path.exists():
+                    try:
+                        file_key_hex = self.current_user["file_keys"].get(
+                            str(metadata_path)
+                        )
+                        if file_key_hex:
+                            file_key = bytes.fromhex(file_key_hex)
+                            metadata_file = File.get_file(metadata_path, file_key)
+                            decrypted_name = metadata_file.file_name.lstrip(".")
+                            print(f"{decrypted_name}/")
+                        else:
+                            print(
+                                f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
+                            )
+                            print(f"{entry.name}/")
+                    except Exception:
+                        print(
+                            f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
+                        )
+                        print(f"{entry.name}/")
             elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
                 continue
             else:
-                print(entry.name)
+                file_key_hex = self.current_user["file_keys"].get(str(entry))
+                if file_key_hex:
+                    try:
+                        file_key = bytes.fromhex(file_key_hex)
+                        file = File.get_file(entry, file_key)
+                        print(file.file_name)
+                    except Exception:
+                        print(
+                            f"Error decrypting file {entry}, displaying encrypted name."
+                        )
+                        print(entry.name)
+                else:
+                    print(f"Error decrypting file {entry}, displaying encrypted name.")
+                    print(entry.name)
 
     @requires_login
     def do_pwd(self, arg):
         """
         Usage: pwd
         """
-        if (
-            self.current_working_directory
-            and self.current_working_directory.is_relative_to(FILES_DIR)
-        ):
-            relative_path = self.current_working_directory.relative_to(FILES_DIR)
-            pwd_str = f"SFS/{relative_path} "
-        else:
-            pwd_str = "SFS"
+        displayed_path = self._build_displayed_path()
+        pwd_str = f"SFS{displayed_path}" if displayed_path is not None else "SFS"
 
         print(pwd_str)
 
@@ -251,7 +335,10 @@ class SecureFS(cmd.Cmd):
             return
 
         file_name = arg.strip()
-        file_path = self.current_working_directory / file_name
+        file_path = (
+            self.current_working_directory
+            / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
+        )
 
         if not file_path.is_file():
             print(f"Error: '{arg.strip()}' is not a valid file.")
@@ -317,7 +404,10 @@ class SecureFS(cmd.Cmd):
             print("Error: File name is required.")
             return
 
-        file_path = self.current_working_directory / file_name
+        file_path = (
+            self.current_working_directory
+            / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
+        )
         content = " ".join(content_tokens)
         output = content if suppress_newline else content + "\n"
         append_mode = redirect_op == ">>"
@@ -359,8 +449,14 @@ class SecureFS(cmd.Cmd):
 
         # rename the file, must be within same directory
         source_name, dest_name = tokens
-        source_path = self.current_working_directory / source_name
-        dest_path = self.current_working_directory / dest_name
+        source_path = (
+            self.current_working_directory
+            / hashlib.sha256(source_name.encode("utf-8")).hexdigest()
+        )
+        dest_path = (
+            self.current_working_directory
+            / hashlib.sha256(dest_name.encode("utf-8")).hexdigest()
+        )
 
         if not source_path.is_file():
             print(f"Error: Source file '{source_name}' does not exist.")
@@ -399,15 +495,25 @@ class SecureFS(cmd.Cmd):
 
         file_name = file_name.rstrip("/")
 
-        file_path = self.current_working_directory / file_name
+        file_path = (
+            self.current_working_directory
+            / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
+        )
 
         if not file_path.exists():
             print(f"Error: File or directory '{file_name}' does not exist.")
             return
 
         if (
-            not file_path.is_relative_to(FILES_DIR / self.current_user["username"])
-            and not file_path == FILES_DIR / self.current_user["username"]
+            not file_path.is_relative_to(
+                FILES_DIR
+                / hashlib.sha256(
+                    self.current_user["username"].encode("utf-8")
+                ).hexdigest()
+            )
+            and not file_path
+            == FILES_DIR
+            / hashlib.sha256(self.current_user["username"].encode("utf-8")).hexdigest()
         ):
             print("Error: You are not the owner of this file.")
             return
@@ -461,10 +567,16 @@ class SecureFS(cmd.Cmd):
             return
 
         file_name = arg.strip()
-        file_path = self.current_working_directory / file_name
+        file_path = (
+            self.current_working_directory
+            / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
+        )
 
         if file_path.is_dir():
-            metadata_path = self.current_working_directory / f".{file_name}"
+            metadata_path = (
+                self.current_working_directory
+                / f".{hashlib.sha256(file_name.encode('utf-8')).hexdigest()}"
+            )
             if not metadata_path.exists():
                 print(f"Error: Metadata for directory '{file_name}' does not exist.")
                 return

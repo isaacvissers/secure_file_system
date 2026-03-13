@@ -1,4 +1,5 @@
 # tests/test_logout.py
+import hashlib
 from types import SimpleNamespace
 
 import pytest
@@ -102,7 +103,8 @@ def test_logout_leaves_shell_usable_for_new_login(monkeypatch):
 
     assert shell.current_user is not None
     assert shell.current_user["username"] == "bob"
-    assert shell.prompt == "SFS/bob> "
+    bob_home = hashlib.sha256("bob".encode("utf-8")).hexdigest()
+    assert shell.prompt == f"SFS/{bob_home}> "
 
 
 def test_logout_idempotent_prompt_reset(capsys):
