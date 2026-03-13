@@ -548,7 +548,7 @@ class SecureFS(cmd.Cmd):
         if file_path.is_dir():
             metadata_path = (
                 self.current_working_directory
-                / hashlib.sha256(f".{file_name}".encode("utf-8")).hexdigest()
+                / f".{hashlib.sha256(file_name.encode('utf-8')).hexdigest()}"
             )
             if not metadata_path.exists():
                 print(f"Error: Metadata for directory '{file_name}' does not exist.")
