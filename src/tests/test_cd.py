@@ -83,13 +83,14 @@ def test_cd_error_when_target_is_a_file(tmp_path, monkeypatch, capsys):
 
 
 def test_cd_blocks_traversal_above_files_dir(tmp_path, monkeypatch, capsys):
-    """cd treats '..' literally and rejects missing hashed directory."""
+    """cd rejects '..' when already at FILES_DIR root."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    original = shell.current_working_directory
+    shell.current_working_directory = tmp_path
+    original = tmp_path
     shell.do_cd("..")
 
     captured = capsys.readouterr()
-    assert "not a valid directory" in captured.out
+    assert "Access outside of storage is not allowed" in captured.out
     assert shell.current_working_directory == original
 
 

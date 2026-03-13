@@ -228,11 +228,7 @@ class SecureFS(cmd.Cmd):
             return
         elif directory_name in {"..", "../"}:
             parent_dir = self.current_working_directory.parent
-            if parent_dir.is_relative_to(
-                FILES_DIR
-            ) or parent_dir == (
-                FILES_DIR
-            ):
+            if parent_dir.is_relative_to(FILES_DIR) or parent_dir == (FILES_DIR):
                 self.current_working_directory = parent_dir
                 self._update_prompt()
             else:
