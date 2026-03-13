@@ -249,11 +249,42 @@ class SecureFS(cmd.Cmd):
         dir_names = {e.name for e in entries if e.is_dir()}
         for entry in entries:
             if entry.is_dir():
-                print(f"{entry.name}/")
+                metadata_path = self.current_working_directory / f".{entry.name}"
+                if metadata_path.exists():
+                    try:
+                        file_key_hex = self.current_user["file_keys"].get(
+                            str(metadata_path)
+                        )
+                        if file_key_hex:
+                            file_key = bytes.fromhex(file_key_hex)
+                            metadata_file = File.get_file(metadata_path, file_key)
+                            decrypted_name = metadata_file.file_name.lstrip(".")
+                            print(f"{decrypted_name}/")
+                        else:
+                            print(
+                                f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
+                            )
+                            print(f"{entry.name}/")
+                    except Exception:
+                        print(
+                            f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
+                        )
+                        print(f"{entry.name}/")
             elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
                 continue
             else:
-                print(entry.name)
+                file_key_hex = self.current_user["file_keys"].get(str(entry))
+                if file_key_hex:
+                    try:
+                        file_key = bytes.fromhex(file_key_hex)
+                        file = File.get_file(entry, file_key)
+                        print(file.file_name)
+                    except Exception:
+                        print(f"Error decrypting file {entry}, displaying encrypted name.")
+                        print(entry.name)
+                else:
+                    print(f"Error decrypting file {entry}, displaying encrypted name.")
+                    print(entry.name)
 
     @requires_login
     def do_pwd(self, arg):
