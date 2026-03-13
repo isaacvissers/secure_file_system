@@ -93,23 +93,26 @@ def get_admin_record() -> Optional[AdminUser]:
         return AdminUser(**data)
 
 
-def _get_admin_or_fail() -> Optional[AdminUser]:
-    admin = get_admin_record()
+def _get_admin_or_fail(admin: Optional[AdminUser] = None) -> Optional[AdminUser]:
+    admin = admin or get_admin_record()
     if not admin:
         print("Admin record not found.")
     return admin
 
 
-def add_user_key_to_admin(username: str, user_key: str) -> None:
-    admin = _get_admin_or_fail()
+def add_user_key_to_admin(
+    username: str, user_key: str, admin: Optional[AdminUser] = None
+) -> Optional[AdminUser]:
+    admin = _get_admin_or_fail(admin)
     if not admin:
-        return
+        return None
 
     if getattr(admin, "user_keys", None) is None:
         admin.user_keys = {}
 
     admin.user_keys[username] = user_key
     save_user(get_admin_key(), admin.__dict__)
+    return admin
 
 
 # --------------------
@@ -124,9 +127,9 @@ def save_user(user_key: str, user_dict: UserDict) -> None:
         json.dump(user_dict, f)
 
 
-def load_user(username: str) -> Optional[UserDict]:
+def load_user(username: str, admin: Optional[AdminUser] = None) -> Optional[UserDict]:
     """Load user by username, using admin index first, then fallback scan."""
-    admin = get_admin_record()
+    admin = admin or get_admin_record()
     if admin and getattr(admin, "user_keys", None):
         user_key = admin.user_keys.get(username)
         if user_key:
@@ -154,16 +157,23 @@ def user_exists(username: str) -> bool:
     return load_user(username) is not None
 
 
+def user_exists_with_admin(username: str, admin: Optional[AdminUser] = None) -> bool:
+    return load_user(username, admin=admin) is not None
+
+
 # --------------------
 # User Creation
 # --------------------
 
 
 def create_user(
-    username: str, password: str, is_admin: bool = False
+    username: str,
+    password: str,
+    is_admin: bool = False,
+    admin: Optional[AdminUser] = None,
 ) -> Optional[UserDict]:
     """Create a new user or admin. Returns user dict."""
-    if user_exists(username):
+    if user_exists_with_admin(username, admin=admin):
         print(f"User '{username}' already exists.")
         return None
 
@@ -179,17 +189,17 @@ def create_user(
         user_dict["group_keys"] = {}
 
     save_user(user_key, user_dict)
-    add_user_key_to_admin(username, user_key)
+    admin = add_user_key_to_admin(username, user_key, admin=admin)
 
     if not is_admin:
-        dir = create_user_directory(user_dict["username"])
+        create_user_directory(user_dict["username"])
 
-        if load_group("all") is None:
+        if load_group("all", admin=admin) is None:
             from backend.group_utils import create_group
 
-            create_group("all")
+            create_group("all", admin=admin)
 
-        added_to_group = add_user_to_group("all", username)
+        added_to_group = add_user_to_group("all", username, admin=admin)
         if not added_to_group:
             print(f"Failed to add user '{username}' to group 'all'.")
             return
@@ -215,7 +225,7 @@ def _resolve_user(
         print(f"User '{username}' not found.")
         return None, None
 
-    user = load_user(username)
+    user = load_user(username, admin=admin)
     if not user:
         print("User file not found.")
         return None, None

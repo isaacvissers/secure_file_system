@@ -29,8 +29,10 @@ def _group_file(group_key: str) -> Path:
     return GROUPS_DIR / f"{group_key}.json"
 
 
-def load_group(name: str) -> Optional[GroupsDict]:
-    admin = auth.get_admin_record()
+def load_group(
+    name: str, admin: Optional[auth.AdminUser] = None
+) -> Optional[GroupsDict]:
+    admin = admin or auth.get_admin_record()
     if not admin:
         return None
 
@@ -57,8 +59,10 @@ def save_group(group_key: str, group_dict: GroupsDict) -> None:
 # --------------------
 
 
-def create_group(name: str) -> Optional[GroupsDict]:
-    admin = auth.get_admin_record()
+def create_group(
+    name: str, admin: Optional[auth.AdminUser] = None
+) -> Optional[GroupsDict]:
+    admin = admin or auth.get_admin_record()
     if not admin:
         print("Admin record not found.")
         return None
@@ -88,8 +92,11 @@ def create_group(name: str) -> Optional[GroupsDict]:
 # --------------------
 
 
-def get_user_groups_by_username(username: str) -> List[str]:
-    admin = auth.get_admin_record()
+def get_user_groups_by_username(
+    username: str,
+    admin: Optional[auth.AdminUser] = None,
+) -> List[str]:
+    admin = admin or auth.get_admin_record()
     if not admin:
         print("Admin record not found.")
         return []
@@ -97,7 +104,7 @@ def get_user_groups_by_username(username: str) -> List[str]:
     if not user_key:
         print(f"User '{username}' not found.")
         return []
-    user = auth.load_user(username)
+    user = auth.load_user(username, admin=admin)
     if not user:
         print("User file not found.")
         return []
@@ -118,8 +125,12 @@ def get_user_groups_by_username(username: str) -> List[str]:
     return result
 
 
-def add_user_to_group(group_name: str, username: str) -> bool:
-    admin = auth.get_admin_record()
+def add_user_to_group(
+    group_name: str,
+    username: str,
+    admin: Optional[auth.AdminUser] = None,
+) -> bool:
+    admin = admin or auth.get_admin_record()
     if not admin:
         print("Admin record not found.")
         return False
@@ -134,12 +145,12 @@ def add_user_to_group(group_name: str, username: str) -> bool:
         print(f"User '{username}' not found.")
         return False
 
-    group = load_group(group_name)
+    group = load_group(group_name, admin=admin)
     if not group:
         print("Group file not found.")
         return False
 
-    user = auth.load_user(username)
+    user = auth.load_user(username, admin=admin)
     if not user:
         print("User file not found.")
         return False
@@ -178,8 +189,12 @@ def _add_group_to_user(user: dict, group_key: str):
         group_keys.append(group_key)
 
 
-def remove_user_from_group(group_name: str, username: str) -> bool:
-    admin = auth.get_admin_record()
+def remove_user_from_group(
+    group_name: str,
+    username: str,
+    admin: Optional[auth.AdminUser] = None,
+) -> bool:
+    admin = admin or auth.get_admin_record()
     if not admin:
         print("Admin record not found.")
         return False
@@ -194,7 +209,7 @@ def remove_user_from_group(group_name: str, username: str) -> bool:
         print(f"User '{username}' not found.")
         return False
 
-    group = load_group(group_name)
+    group = load_group(group_name, admin=admin)
     if not group:
         print("Group file not found.")
         return False
@@ -208,7 +223,7 @@ def remove_user_from_group(group_name: str, username: str) -> bool:
     members.pop(username, None)
 
     # remove group from user's group_keys
-    user = auth.load_user(username)
+    user = auth.load_user(username, admin=admin)
     if user is None:
         print("User file not found.")
         return False

@@ -2,6 +2,7 @@ import cmd
 import json
 import shlex
 
+import backend.auth as auth
 from backend.auth import *
 from backend.auth import FILES_DIR
 from backend.cryptography_utils import *
@@ -17,9 +18,23 @@ from models.file import File, Permission
 class SecureFS(cmd.Cmd):
     def __init__(self):
         super().__init__()
+        self.admin_cache = None
         self.current_user = None
         self.current_working_directory = None
         self._update_prompt()
+
+    def _load_admin_cache(self, force_refresh: bool = False):
+        """Load the admin record into cache if not already loaded or if force_refresh is True."""
+        if self.admin_cache is not None and not force_refresh:
+            return self.admin_cache
+
+        admin = get_admin_record()
+        if not admin:
+            self.admin_cache = None
+            return None
+
+        self.admin_cache = admin
+        return self.admin_cache
 
     def _update_prompt(self):
         """Update the interactive prompt to include the logged-in username."""
@@ -43,7 +58,7 @@ class SecureFS(cmd.Cmd):
         if file_key_updates:
             current_user.setdefault("file_keys", {}).update(file_key_updates)
 
-        refreshed_user = load_user(username)
+        refreshed_user = load_user(username, admin=self.admin_cache)
         if refreshed_user is None:
             self.current_user = current_user
             return
@@ -65,7 +80,7 @@ class SecureFS(cmd.Cmd):
             return
         username, password = credentials
 
-        admin = get_admin_record()
+        admin = self._load_admin_cache()
         if not admin:
             print("Error: Admin record missing.")
             return
@@ -431,8 +446,10 @@ class SecureFS(cmd.Cmd):
             file.save()
             if permissions == Permission.GROUP.value:
                 file_key = file.encrypted_file_key
-                for g in get_user_groups_by_username(self.current_user["username"]):
-                    add_file_to_group(g, file_key)
+                for g in get_user_groups_by_username(
+                    self.current_user["username"], admin=self.admin_cache
+                ):
+                    add_file_to_group(g, file_key, admin=self.admin_cache)
 
     @requires_login
     def do_get_permissions(self, arg):
@@ -474,11 +491,14 @@ class SecureFS(cmd.Cmd):
             return
         username, password = credentials
 
-        created_user = create_user(username, password, is_admin=False)
+        created_user = create_user(
+            username, password, is_admin=False, admin=self.admin_cache
+        )
         if created_user is None:
             print("Error: Username already exists.")
             return
 
+        self._load_admin_cache(force_refresh=True)
         print(f"User created: {username} ")
 
     @requires_admin
@@ -490,9 +510,11 @@ class SecureFS(cmd.Cmd):
         if group_name is None:
             return
 
-        created = create_group(group_name)
+        created = create_group(group_name, admin=self.admin_cache)
         if created is None:
             return
+
+        self._load_admin_cache(force_refresh=True)
         print(f"Group created: {group_name}")
 
     @requires_admin
@@ -508,20 +530,26 @@ class SecureFS(cmd.Cmd):
         if username is None:
             return
 
-        user_data = load_user(username)
-        if user_data is None:
+        admin = self._load_admin_cache()
+        if not admin:
+            print("Error: Admin record missing.")
+            return
+
+        if username not in admin.user_keys:
             print(f"Error: User '{username}' does not exist.")
             return
 
-        group_data = load_group(group_name)
+        group_data = load_group(group_name, admin=self.admin_cache)
         if group_data is None:
             print(f"Error: Group '{group_name}' does not exist.")
             return
 
-        added_to_group = add_user_to_group(group_name, username)
+        added_to_group = add_user_to_group(group_name, username, admin=self.admin_cache)
         if not added_to_group:
             print(f"Failed to add user '{username}' to group '{group_name}'.")
             return
+
+        self._load_admin_cache(force_refresh=True)
 
         print(f"User '{username}' added to group '{group_name}'.")
 
@@ -538,12 +566,16 @@ class SecureFS(cmd.Cmd):
         if username is None:
             return
 
-        user_data = load_user(username)
-        if user_data is None:
+        admin = self._load_admin_cache()
+        if not admin:
+            print("Error: Admin record missing.")
+            return
+
+        if username not in admin.user_keys:
             print(f"Error: User '{username}' does not exist.")
             return
 
-        group_data = load_group(group_name)
+        group_data = load_group(group_name, admin=self.admin_cache)
         if group_data is None:
             print(f"Error: Group '{group_name}' does not exist.")
             return
@@ -553,10 +585,12 @@ class SecureFS(cmd.Cmd):
             print(f"User '{username}' is not a member of group '{group_name}'.")
             return
 
-        removed = remove_user_from_group(group_name, username)
+        removed = remove_user_from_group(group_name, username, admin=self.admin_cache)
         if not removed:
             print(f"Failed to remove user '{username}' from group '{group_name}'.")
             return
+
+        self._load_admin_cache(force_refresh=True)
 
         print(f"User '{username}' removed from group '{group_name}'.")
 
@@ -566,13 +600,13 @@ class SecureFS(cmd.Cmd):
         Usage: list_users
         """
         print("Users:")
-        admin = get_admin_record()
+        admin = self._load_admin_cache()
         if not admin:
             return
 
         keys = getattr(admin, "user_keys", {}) or {}
         for uname in keys:
-            user = load_user(uname)
+            user = load_user(uname, admin=admin)
             if user is None:
                 continue
             print(f" - {user.get('username')}")

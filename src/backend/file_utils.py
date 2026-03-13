@@ -47,9 +47,9 @@ def _normalize_file_key(file_key: Any) -> str:
     return str(file_key)
 
 
-def get_user_file_keys(username: str) -> list:
+def get_user_file_keys(username: str, admin=None) -> list:
     """Return the list of file keys associated with the user."""
-    user = load_user(username)
+    user = load_user(username, admin=admin)
     if not user:
         print(f"User '{username}' not found.")
         return []
@@ -78,7 +78,10 @@ def _infer_file_name(file_name_or_key: Any) -> str:
 
 
 def add_file_to_user(
-    file_name: Any, file_key: Any = None, username: str = None
+    file_name: Any,
+    file_key: Any = None,
+    username: str = None,
+    admin=None,
 ) -> bool:
     """Normalize `file_key` and add it to the user's `file_keys` list."""
     if username is None:
@@ -86,7 +89,7 @@ def add_file_to_user(
         file_key = file_name
         file_name = _infer_file_name(file_key)
 
-    admin = _get_admin_or_fail()
+    admin = _get_admin_or_fail(admin)
     if not admin:
         return None
 
@@ -94,7 +97,7 @@ def add_file_to_user(
     if not user_key:
         return False
 
-    user = load_user(username)
+    user = load_user(username, admin=admin)
     if not user:
         return False
 
@@ -108,9 +111,9 @@ def add_file_to_user(
     return True
 
 
-def add_file_to_group(group_name: str, file_key: Any) -> bool:
+def add_file_to_group(group_name: str, file_key: Any, admin=None) -> bool:
     """Normalize `file_key` and add it to the group's `file_keys` list."""
-    admin = _get_admin_or_fail()
+    admin = _get_admin_or_fail(admin)
     if not admin:
         return None
 
@@ -120,7 +123,7 @@ def add_file_to_group(group_name: str, file_key: Any) -> bool:
         print(f"Group '{group_name}' not found.")
         return False
 
-    group = load_group(group_name)
+    group = load_group(group_name, admin=admin)
     if not group:
         print("Group file not found.")
         return False
@@ -134,16 +137,16 @@ def add_file_to_group(group_name: str, file_key: Any) -> bool:
     return True
 
 
-def add_file_to_user_and_groups(file_key: Any, username: str) -> bool:
+def add_file_to_user_and_groups(file_key: Any, username: str, admin=None) -> bool:
     """Add file to the user and to all groups the user belongs to."""
-    if not add_file_to_user(file_key, username):
+    if not add_file_to_user(file_key, username, admin=admin):
         return False
 
-    if not get_user_groups_by_username(username):
+    if not get_user_groups_by_username(username, admin=admin):
         return True
 
     fk = _normalize_file_key(file_key)
-    for g in get_user_groups_by_username(username) or []:
-        add_file_to_group(g, fk)
+    for g in get_user_groups_by_username(username, admin=admin) or []:
+        add_file_to_group(g, fk, admin=admin)
 
     return True
