@@ -22,43 +22,45 @@ class SecureFS(cmd.Cmd):
         self.current_working_directory = None
         self._update_prompt()
 
-    def _update_prompt(self):
-        """Update the interactive prompt to include the logged-in username."""
-        if (
+    def _build_displayed_path(self):
+        """Return cwd path under FILES_DIR with decrypted names when available."""
+        if not (
             self.current_working_directory
             and self.current_working_directory.is_relative_to(FILES_DIR)
         ):
-            relative_path = self.current_working_directory.relative_to(FILES_DIR)
+            return None
 
-            # loop through the rest of the path and replace directory names with their decrypted names if possible
-            base_dir = FILES_DIR
-            displayed_path = ""
-            for part in relative_path.parts:
-                metadata_path = base_dir / f".{part}"
-                if metadata_path.exists():
-                    try:
-                        file_key_hex = self.current_user["file_keys"].get(
-                            str(metadata_path)
-                        )
-                        if file_key_hex:
-                            file_key = bytes.fromhex(file_key_hex)
-                            metadata_file = File.get_file(metadata_path, file_key)
-                            decrypted_name = metadata_file.file_name.lstrip(".")
-                            base_dir = base_dir / part
-                            displayed_path += f"/{decrypted_name}"
-                    except Exception:
-                        print(
-                            f"Error decrypting metadata for {metadata_path}, using encrypted name in prompt."
-                        )
-                        base_dir = base_dir / part
-                        displayed_path += f"/{part}"
-                else:
-                    print(
-                        f"Metadata for {base_dir / part} not found, using encrypted name in prompt."
+        relative_path = self.current_working_directory.relative_to(FILES_DIR)
+        base_dir = FILES_DIR
+        displayed_path = ""
+
+        for part in relative_path.parts:
+            metadata_path = base_dir / f".{part}"
+            if metadata_path.exists():
+                try:
+                    file_key_hex = self.current_user["file_keys"].get(
+                        str(metadata_path)
                     )
-                    base_dir = base_dir / part
+                    if file_key_hex:
+                        file_key = bytes.fromhex(file_key_hex)
+                        metadata_file = File.get_file(metadata_path, file_key)
+                        decrypted_name = metadata_file.file_name.lstrip(".")
+                        displayed_path += f"/{decrypted_name}"
+                    else:
+                        displayed_path += f"/{part}"
+                except Exception:
                     displayed_path += f"/{part}"
+            else:
+                displayed_path += f"/{part}"
 
+            base_dir = base_dir / part
+
+        return displayed_path
+
+    def _update_prompt(self):
+        """Update the interactive prompt to include the logged-in username."""
+        displayed_path = self._build_displayed_path()
+        if displayed_path is not None:
             self.prompt = f"SFS{displayed_path}> "
         else:
             self.prompt = "SFS> "
@@ -280,7 +282,9 @@ class SecureFS(cmd.Cmd):
                         file = File.get_file(entry, file_key)
                         print(file.file_name)
                     except Exception:
-                        print(f"Error decrypting file {entry}, displaying encrypted name.")
+                        print(
+                            f"Error decrypting file {entry}, displaying encrypted name."
+                        )
                         print(entry.name)
                 else:
                     print(f"Error decrypting file {entry}, displaying encrypted name.")
@@ -291,14 +295,8 @@ class SecureFS(cmd.Cmd):
         """
         Usage: pwd
         """
-        if (
-            self.current_working_directory
-            and self.current_working_directory.is_relative_to(FILES_DIR)
-        ):
-            relative_path = self.current_working_directory.relative_to(FILES_DIR)
-            pwd_str = f"SFS/{relative_path} "
-        else:
-            pwd_str = "SFS"
+        displayed_path = self._build_displayed_path()
+        pwd_str = f"SFS{displayed_path}" if displayed_path is not None else "SFS"
 
         print(pwd_str)
 

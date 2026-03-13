@@ -23,12 +23,12 @@ def test_file_create_sets_file_name(tmp_path):
 
 def test_file_create_sets_path_to_plain_file(tmp_path):
     f = File.create(tmp_path, "notes", "owner")
-    assert f.path == tmp_path / "notes"
+    assert f.path == tmp_path / hashlib.sha256("notes".encode("utf-8")).hexdigest()
 
 
 def test_file_create_writes_file_to_disk(tmp_path):
     File.create(tmp_path, "notes", "owner")
-    assert (tmp_path / "notes").exists()
+    assert (tmp_path / hashlib.sha256("notes".encode("utf-8")).hexdigest()).exists()
 
 
 def test_file_create_writes_encrypted_payload(tmp_path):
@@ -77,7 +77,9 @@ def test_file_create_default_permission_in_json(tmp_path):
 
 
 def test_file_create_raises_when_file_already_exists(tmp_path):
-    (tmp_path / "duplicate").write_bytes(b"{}")
+    (tmp_path / hashlib.sha256("duplicate".encode("utf-8")).hexdigest()).write_bytes(
+        b"{}"
+    )
     with pytest.raises(FileExistsError):
         File.create(tmp_path, "duplicate", "owner")
 
@@ -91,7 +93,7 @@ def test_file_create_encrypted_fields_are_hex_strings(tmp_path):
 
 def test_file_create_encrypted_name_is_deterministic_hash(tmp_path):
     f = File.create(tmp_path, "secret", "owner")
-    expected_hash = hashlib.sha256(str(f.path).encode("utf-8")).hexdigest()
+    expected_hash = hashlib.sha256("secret".encode("utf-8")).hexdigest()
     assert f.encrypted_name == expected_hash
 
 

@@ -1,5 +1,7 @@
 import main as main_module
 from main import SecureFS
+from models.directory import Directory
+from tests.path_helpers import encrypted_path
 from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
@@ -10,11 +12,13 @@ from tests.test_login import _make_user_data
 def _logged_in_shell(tmp_path, monkeypatch):
     """Return a SecureFS instance logged in with cwd inside FILES_DIR/alice."""
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    user_home = tmp_path / "alice"
-    user_home.mkdir(exist_ok=True)
+    user_home = Directory.create(tmp_path, "alice", "alice")
     shell = SecureFS()
     shell.current_user = _make_user_data(user_id=1, username="alice")
-    shell.current_working_directory = user_home
+    shell.current_user["file_keys"][
+        str(user_home.metadata.path)
+    ] = user_home.metadata.encrypted_file_key.hex()
+    shell.current_working_directory = user_home.path
     shell._update_prompt()
     return shell
 
@@ -31,7 +35,7 @@ def test_touch_creates_file(tmp_path, monkeypatch, capsys):
 
     shell.do_touch("")
 
-    assert (tmp_path / "alice" / "notes").exists()
+    assert encrypted_path(shell.current_working_directory, "notes").exists()
     captured = capsys.readouterr()
     assert "created" in captured.out
 
@@ -42,7 +46,7 @@ def test_touch_via_arg(tmp_path, monkeypatch, capsys):
 
     shell.do_touch("readme")
 
-    assert (tmp_path / "alice" / "readme").exists()
+    assert encrypted_path(shell.current_working_directory, "readme").exists()
     captured = capsys.readouterr()
     assert "created" in captured.out
 
@@ -54,7 +58,7 @@ def test_touch_via_prompt(tmp_path, monkeypatch, capsys):
 
     shell.do_touch("")
 
-    assert (tmp_path / "alice" / "todo").exists()
+    assert encrypted_path(shell.current_working_directory, "todo").exists()
 
 
 def test_touch_prints_success_message(tmp_path, monkeypatch, capsys):
@@ -72,7 +76,7 @@ def test_touch_prints_success_message(tmp_path, monkeypatch, capsys):
 def test_touch_error_when_file_already_exists(tmp_path, monkeypatch, capsys):
     """touch prints an error without raising when the file already exists."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    (tmp_path / "alice" / "dup").write_text("{}")
+    encrypted_path(shell.current_working_directory, "dup").write_text("{}")
     monkeypatch.setattr(main_module, "prompt_required_text", lambda label: "dup")
 
     shell.do_touch("")
@@ -113,7 +117,7 @@ def test_touch_blocked_when_not_logged_in(tmp_path, monkeypatch, capsys):
 def test_touch_blocked_outside_home_directory(tmp_path, monkeypatch, capsys):
     """touch rejects file creation when cwd is outside the user's home directory."""
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    other_user = tmp_path / "bob"
+    other_user = encrypted_path(tmp_path, "bob")
     other_user.mkdir()
 
     shell = SecureFS()
@@ -124,7 +128,7 @@ def test_touch_blocked_outside_home_directory(tmp_path, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "Cannot create files outside of your home directory" in captured.out
-    assert not (other_user / "stolen").exists()
+    assert not encrypted_path(other_user, "stolen").exists()
 
 
 def test_touch_blocked_at_files_dir_root(tmp_path, monkeypatch, capsys):
@@ -143,17 +147,22 @@ def test_touch_blocked_at_files_dir_root(tmp_path, monkeypatch, capsys):
 
 def test_touch_allowed_in_subdirectory_of_home(tmp_path, monkeypatch, capsys):
     """touch succeeds when cwd is a subdirectory inside the user's home."""
-    user_home = tmp_path / "alice"
-    subdir = user_home / "documents"
-    subdir.mkdir(parents=True)
+    user_home = Directory.create(tmp_path, "alice", "alice")
+    subdir = Directory.create(user_home.path, "documents", "alice")
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
 
     shell = SecureFS()
     shell.current_user = _make_user_data(user_id=1, username="alice")
-    shell.current_working_directory = subdir
+    shell.current_user["file_keys"][
+        str(user_home.metadata.path)
+    ] = user_home.metadata.encrypted_file_key.hex()
+    shell.current_user["file_keys"][
+        str(subdir.metadata.path)
+    ] = subdir.metadata.encrypted_file_key.hex()
+    shell.current_working_directory = subdir.path
 
     shell.do_touch("nested")
 
     captured = capsys.readouterr()
     assert "created" in captured.out
-    assert (subdir / "nested").exists()
+    assert encrypted_path(subdir.path, "nested").exists()

@@ -1,4 +1,5 @@
 # tests/test_login_safe.py
+import hashlib
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +10,11 @@ import backend.auth as auth
 import main as main_module
 from backend.auth import FILES_DIR
 from main import SecureFS
+
+
+def _home_path(base: Path, username: str) -> Path:
+    return base / hashlib.sha256(username.encode("utf-8")).hexdigest()
+
 
 # ---------------------------
 # Fixtures
@@ -72,9 +78,9 @@ def test_login_success(monkeypatch, capsys, temp_files_dir):
     shell.do_login("")
 
     assert shell.current_user is not None
-    assert shell.current_working_directory == temp_files_dir / "alice"
+    assert shell.current_working_directory == _home_path(temp_files_dir, "alice")
     assert shell.current_user == user_data
-    assert shell.prompt == "SFS/alice> "
+    assert shell.prompt == f"SFS/{_home_path(temp_files_dir, 'alice').name}> "
     captured = capsys.readouterr()
     assert "Login successful" in captured.out
 
@@ -139,7 +145,7 @@ def test_login_sets_correct_working_directory(monkeypatch, temp_files_dir):
     shell = SecureFS()
     shell.do_login("")
 
-    assert shell.current_working_directory == temp_files_dir / "carol"
+    assert shell.current_working_directory == _home_path(temp_files_dir, "carol")
 
 
 def test_login_does_not_overwrite_existing_session(monkeypatch, capsys):
@@ -196,4 +202,4 @@ def test_login_password_branch(monkeypatch, capsys, temp_files_dir):
 
     # Should succeed because current placeholder logic does not verify password
     assert shell.current_user == user_data
-    assert shell.prompt == "SFS/alice> "
+    assert shell.prompt == f"SFS/{_home_path(temp_files_dir, 'alice').name}> "

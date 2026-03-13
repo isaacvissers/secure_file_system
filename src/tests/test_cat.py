@@ -1,7 +1,9 @@
 import main as main_module
 from main import SecureFS
+from models.directory import Directory
 from models.file import File
 from tests.encryption_helpers import track_file
+from tests.path_helpers import encrypted_path
 from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
@@ -12,12 +14,14 @@ from tests.test_login import _make_user_data
 def _logged_in_shell(tmp_path, monkeypatch):
     """Return a SecureFS instance logged in with cwd inside FILES_DIR/alice."""
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    user_home = tmp_path / "alice"
-    user_home.mkdir(exist_ok=True)
+    user_home = Directory.create(tmp_path, "alice", "alice")
 
     shell = SecureFS()
     shell.current_user = _make_user_data(user_id=1, username="alice")
-    shell.current_working_directory = user_home
+    shell.current_user["file_keys"][
+        str(user_home.metadata.path)
+    ] = user_home.metadata.encrypted_file_key.hex()
+    shell.current_working_directory = user_home.path
     shell._update_prompt()
     return shell
 
@@ -32,7 +36,9 @@ def test_cat_reads_file_body(tmp_path, monkeypatch, capsys):
     shell = _logged_in_shell(tmp_path, monkeypatch)
     track_file(
         shell,
-        File.create(tmp_path / "alice", "notes", "alice", body="hello world"),
+        File.create(
+            shell.current_working_directory, "notes", "alice", body="hello world"
+        ),
     )
 
     shell.do_cat("notes")
@@ -64,7 +70,7 @@ def test_cat_errors_for_missing_file(tmp_path, monkeypatch, capsys):
 def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
     """cat reports a read error when the session does not have the file key."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(tmp_path / "alice", "broken", "alice", body="secret")
+    File.create(shell.current_working_directory, "broken", "alice", body="secret")
 
     shell.do_cat("broken")
 
@@ -75,7 +81,7 @@ def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
 def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, capsys):
     """cat treats a .json suffix literally when looking up the path."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(tmp_path / "alice", "notes", "alice"))
+    track_file(shell, File.create(shell.current_working_directory, "notes", "alice"))
 
     shell.do_cat("notes.json")
 
@@ -86,7 +92,7 @@ def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, c
 def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
     """cat reports read errors when target file is not a valid encrypted payload."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    broken_file = tmp_path / "alice" / "broken"
+    broken_file = encrypted_path(shell.current_working_directory, "broken")
     broken_file.write_text("{not-json", encoding="utf-8")
 
     shell.do_cat("broken")
@@ -98,7 +104,7 @@ def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
 def test_cat_prints_blank_line_for_empty_body(tmp_path, monkeypatch, capsys):
     """cat prints a newline when the decrypted body is empty."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(tmp_path / "alice", "empty", "alice"))
+    track_file(shell, File.create(shell.current_working_directory, "empty", "alice"))
     capsys.readouterr()
 
     shell.do_cat("empty")

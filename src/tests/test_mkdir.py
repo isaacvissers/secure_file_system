@@ -1,6 +1,8 @@
 import main as main_module
 from backend.auth import FILES_DIR
 from main import SecureFS
+from models.directory import Directory
+from tests.path_helpers import encrypted_name, encrypted_path
 from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
@@ -11,11 +13,13 @@ from tests.test_login import _make_user_data
 def _logged_in_shell(tmp_path, monkeypatch):
     """Return a SecureFS instance logged in with cwd inside FILES_DIR/alice."""
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    user_home = tmp_path / "alice"
-    user_home.mkdir(exist_ok=True)
+    user_home = Directory.create(tmp_path, "alice", "alice")
     shell = SecureFS()
     shell.current_user = _make_user_data(user_id=1, username="alice")
-    shell.current_working_directory = user_home
+    shell.current_user["file_keys"][
+        str(user_home.metadata.path)
+    ] = user_home.metadata.encrypted_file_key.hex()
+    shell.current_working_directory = user_home.path
     shell._update_prompt()
     return shell
 
@@ -32,7 +36,7 @@ def test_mkdir_creates_directory(tmp_path, monkeypatch, capsys):
 
     shell.do_mkdir("")
 
-    assert (tmp_path / "alice" / "docs").is_dir()
+    assert encrypted_path(shell.current_working_directory, "docs").is_dir()
     captured = capsys.readouterr()
     assert "created" in captured.out
 
@@ -51,9 +55,8 @@ def test_mkdir_prints_success_message(tmp_path, monkeypatch, capsys):
 
 def test_mkdir_error_when_directory_already_exists(tmp_path, monkeypatch, capsys):
     """mkdir prints an error and does not raise when the directory already exists."""
-    (tmp_path / "alice" / "photos").mkdir(parents=True)
-
     shell = _logged_in_shell(tmp_path, monkeypatch)
+    encrypted_path(shell.current_working_directory, "photos").mkdir(parents=True)
     monkeypatch.setattr(main_module, "prompt_required_text", lambda label: "photos")
 
     shell.do_mkdir("")
@@ -109,7 +112,7 @@ def test_mkdir_creates_directory_in_cwd(tmp_path, monkeypatch):
 
     shell.do_mkdir("")
 
-    expected = tmp_path / "alice" / "archive"
+    expected = encrypted_path(shell.current_working_directory, "archive")
     assert expected.exists() and expected.is_dir()
 
 
@@ -122,8 +125,12 @@ def test_mkdir_multiple_distinct_directories(tmp_path, monkeypatch, capsys):
         )
         shell.do_mkdir("")
 
-    dirs = {p.name for p in (tmp_path / "alice").iterdir() if p.is_dir()}
-    assert dirs == {"alpha", "beta", "gamma"}
+    dirs = {p.name for p in shell.current_working_directory.iterdir() if p.is_dir()}
+    assert dirs == {
+        encrypted_name("alpha"),
+        encrypted_name("beta"),
+        encrypted_name("gamma"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +141,7 @@ def test_mkdir_multiple_distinct_directories(tmp_path, monkeypatch, capsys):
 def test_mkdir_blocked_outside_home_directory(tmp_path, monkeypatch, capsys):
     """mkdir rejects creation when cwd is outside the user's home directory."""
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    other_user = tmp_path / "bob"
+    other_user = encrypted_path(tmp_path, "bob")
     other_user.mkdir()
 
     shell = SecureFS()
@@ -165,17 +172,22 @@ def test_mkdir_blocked_at_files_dir_root(tmp_path, monkeypatch, capsys):
 
 def test_mkdir_allowed_in_subdirectory_of_home(tmp_path, monkeypatch, capsys):
     """mkdir succeeds when cwd is a subdirectory inside the user's home."""
-    user_home = tmp_path / "alice"
-    subdir = user_home / "documents"
-    subdir.mkdir(parents=True)
+    user_home = Directory.create(tmp_path, "alice", "alice")
+    subdir = Directory.create(user_home.path, "documents", "alice")
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
 
     shell = SecureFS()
     shell.current_user = _make_user_data(user_id=1, username="alice")
-    shell.current_working_directory = subdir
+    shell.current_user["file_keys"][
+        str(user_home.metadata.path)
+    ] = user_home.metadata.encrypted_file_key.hex()
+    shell.current_user["file_keys"][
+        str(subdir.metadata.path)
+    ] = subdir.metadata.encrypted_file_key.hex()
+    shell.current_working_directory = subdir.path
 
     shell.do_mkdir("nested")
 
     captured = capsys.readouterr()
     assert "created" in captured.out
-    assert (subdir / "nested").is_dir()
+    assert encrypted_path(subdir.path, "nested").is_dir()
