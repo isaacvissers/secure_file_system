@@ -1,3 +1,4 @@
+import backend.file_utils as file_utils
 import main as main_module
 from main import SecureFS
 from models.directory import Directory
@@ -13,6 +14,7 @@ from tests.test_login import _make_user_data
 def _logged_in_shell(tmp_path, monkeypatch):
     """Return a SecureFS instance with cwd set to FILES_DIR/alice."""
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
+    monkeypatch.setattr(file_utils, "add_file_to_user", lambda *args, **kwargs: True)
     user_home = Directory.create(tmp_path, "alice", "alice")
     shell = SecureFS()
     shell.current_user = _make_user_data(user_id=1, username="alice")
