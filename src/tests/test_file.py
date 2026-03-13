@@ -21,14 +21,14 @@ def test_file_create_sets_file_name(tmp_path):
     assert f.file_name == "notes"
 
 
-def test_file_create_sets_path_to_json_file(tmp_path):
+def test_file_create_sets_path_to_plain_file(tmp_path):
     f = File.create(tmp_path, "notes", "owner")
-    assert f.path == tmp_path / "notes.json"
+    assert f.path == tmp_path / "notes"
 
 
 def test_file_create_writes_file_to_disk(tmp_path):
     File.create(tmp_path, "notes", "owner")
-    assert (tmp_path / "notes.json").exists()
+    assert (tmp_path / "notes").exists()
 
 
 def test_file_create_writes_encrypted_payload(tmp_path):
@@ -77,7 +77,7 @@ def test_file_create_default_permission_in_json(tmp_path):
 
 
 def test_file_create_raises_when_file_already_exists(tmp_path):
-    (tmp_path / "duplicate.json").write_bytes(b"{}")
+    (tmp_path / "duplicate").write_bytes(b"{}")
     with pytest.raises(FileExistsError):
         File.create(tmp_path, "duplicate", "owner")
 

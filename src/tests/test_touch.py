@@ -24,14 +24,14 @@ def _logged_in_shell(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_touch_creates_json_file(tmp_path, monkeypatch, capsys):
-    """touch creates a <name>.json metadata file in current_working_directory."""
+def test_touch_creates_file(tmp_path, monkeypatch, capsys):
+    """touch creates a plain file in current_working_directory."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     monkeypatch.setattr(main_module, "prompt_required_text", lambda label: "notes")
 
     shell.do_touch("")
 
-    assert (tmp_path / "alice" / "notes.json").exists()
+    assert (tmp_path / "alice" / "notes").exists()
     captured = capsys.readouterr()
     assert "created" in captured.out
 
@@ -42,7 +42,7 @@ def test_touch_via_arg(tmp_path, monkeypatch, capsys):
 
     shell.do_touch("readme")
 
-    assert (tmp_path / "alice" / "readme.json").exists()
+    assert (tmp_path / "alice" / "readme").exists()
     captured = capsys.readouterr()
     assert "created" in captured.out
 
@@ -54,7 +54,7 @@ def test_touch_via_prompt(tmp_path, monkeypatch, capsys):
 
     shell.do_touch("")
 
-    assert (tmp_path / "alice" / "todo.json").exists()
+    assert (tmp_path / "alice" / "todo").exists()
 
 
 def test_touch_prints_success_message(tmp_path, monkeypatch, capsys):
@@ -72,7 +72,7 @@ def test_touch_prints_success_message(tmp_path, monkeypatch, capsys):
 def test_touch_error_when_file_already_exists(tmp_path, monkeypatch, capsys):
     """touch prints an error without raising when the file already exists."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    (tmp_path / "alice" / "dup.json").write_text("{}")
+    (tmp_path / "alice" / "dup").write_text("{}")
     monkeypatch.setattr(main_module, "prompt_required_text", lambda label: "dup")
 
     shell.do_touch("")
@@ -124,7 +124,7 @@ def test_touch_blocked_outside_home_directory(tmp_path, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "Cannot create files outside of your home directory" in captured.out
-    assert not (other_user / "stolen.json").exists()
+    assert not (other_user / "stolen").exists()
 
 
 def test_touch_blocked_at_files_dir_root(tmp_path, monkeypatch, capsys):
@@ -156,4 +156,4 @@ def test_touch_allowed_in_subdirectory_of_home(tmp_path, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "created" in captured.out
-    assert (subdir / "nested.json").exists()
+    assert (subdir / "nested").exists()

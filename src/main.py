@@ -134,6 +134,8 @@ class SecureFS(cmd.Cmd):
                 directory_name,
                 self.current_user["username"],
             )
+            self._refresh_current_user()
+
             print(f"Directory '{directory_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -203,10 +205,10 @@ class SecureFS(cmd.Cmd):
         for entry in entries:
             if entry.is_dir():
                 print(f"{entry.name}/")
-            elif entry.suffix == ".json" and entry.stem in dir_names:
+            elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
                 continue
             else:
-                print(entry.name.replace(".json", "", 1))
+                print(entry.name)
 
     @requires_login
     def do_pwd(self, arg):
@@ -233,7 +235,7 @@ class SecureFS(cmd.Cmd):
             print("Error: File name is required.")
             return
 
-        file_name = arg.strip() + ".json"
+        file_name = arg.strip()
         file_path = self.current_working_directory / file_name
 
         if not file_path.is_file():
@@ -299,10 +301,6 @@ class SecureFS(cmd.Cmd):
         if not file_name:
             print("Error: File name is required.")
             return
-        if not file_name.endswith(
-            ".json"
-        ):  # TODO I think we should remove this what if the user wants a file called x.json
-            file_name += ".json"
 
         file_path = self.current_working_directory / file_name
         content = " ".join(content_tokens)
@@ -313,9 +311,7 @@ class SecureFS(cmd.Cmd):
             # TODO: decrypt body contents first, modify the decrypted content, then re-encrypt and write back to file instead of just writing raw output
             if not file_path.exists():
                 # TODO I think we need to rethink this part too
-                logical_name = (
-                    file_name[:-5] if file_name.endswith(".json") else file_name
-                )
+                logical_name = file_name
                 file = File.create(
                     self.current_working_directory,
                     logical_name,
@@ -331,9 +327,7 @@ class SecureFS(cmd.Cmd):
                     bytes.fromhex(self.current_user["file_keys"].get(str(file_path))),
                 )
                 file.body = file.body + output if append_mode else output
-                file.save(
-                    bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
-                )
+                file.save()
 
         except Exception as e:
             print(f"Error writing to file: {e}")
@@ -350,8 +344,8 @@ class SecureFS(cmd.Cmd):
 
         # rename the file, must be within same directory
         source_name, dest_name = tokens
-        source_path = self.current_working_directory / (source_name + ".json")
-        dest_path = self.current_working_directory / (dest_name + ".json")
+        source_path = self.current_working_directory / source_name
+        dest_path = self.current_working_directory / dest_name
 
         if not source_path.is_file():
             print(f"Error: Source file '{source_name}' does not exist.")
@@ -390,16 +384,16 @@ class SecureFS(cmd.Cmd):
 
         file_name = file_name.rstrip("/")
 
-        file_path = self.current_working_directory / (file_name + ".json")
-        directory_path = self.current_working_directory / file_name
+        file_path = self.current_working_directory / file_name
 
-        if not file_path.is_file():
-            print(f"Error: File '{file_name}' does not exist.")
+        if not file_path.exists():
+            print(f"Error: File or directory '{file_name}' does not exist.")
             return
 
-        if not file_path.is_relative_to(
-            FILES_DIR / self.current_user["username"]
-        ) and not file_path == FILES_DIR / (self.current_user["username"] + ".json"):
+        if (
+            not file_path.is_relative_to(FILES_DIR / self.current_user["username"])
+            and not file_path == FILES_DIR / self.current_user["username"]
+        ):
             print("Error: You are not the owner of this file.")
             return
 
@@ -409,17 +403,32 @@ class SecureFS(cmd.Cmd):
             )
             return
 
-        target_paths = [file_path]
-        if recursive and directory_path.is_dir():
-            target_paths.extend(directory_path.rglob("*.json"))
+        target_paths = []
+
+        if not file_path.is_dir():
+            target_paths.append(file_path)
+        else:
+            metadata_path = file_path.parent / f".{file_path.name}"
+            target_paths.append(metadata_path)
+            if recursive:
+                # Add all files in the directory tree, including metadata dotfiles
+                # for nested directories.
+                for nested_path in file_path.rglob("*"):
+                    target_paths.append(nested_path)
+                    if nested_path.is_dir():
+                        target_paths.append(nested_path.parent / f".{nested_path.name}")
+
+        target_paths = list(dict.fromkeys(target_paths))
 
         for target_path in target_paths:
+            if target_path.is_dir():
+                continue
             file_key = bytes.fromhex(
                 self.current_user["file_keys"].get(str(target_path))
             )
             file = File.get_file(target_path, file_key)
             file.permission = Permission(permissions)
-            file.save(file_key)
+            file.save()
             if permissions == Permission.GROUP.value:
                 file_key = file.encrypted_file_key
                 for g in get_user_groups_by_username(self.current_user["username"]):
@@ -435,7 +444,14 @@ class SecureFS(cmd.Cmd):
             return
 
         file_name = arg.strip()
-        file_path = self.current_working_directory / (file_name + ".json")
+        file_path = self.current_working_directory / file_name
+
+        if file_path.is_dir():
+            metadata_path = self.current_working_directory / f".{file_name}"
+            if not metadata_path.exists():
+                print(f"Error: Metadata for directory '{file_name}' does not exist.")
+                return
+            file_path = metadata_path
 
         if not file_path.is_file():
             print(f"Error: '{file_name}' is not a valid file.")

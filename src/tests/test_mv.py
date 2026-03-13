@@ -34,8 +34,8 @@ def test_mv_renames_file_in_current_directory(tmp_path, monkeypatch):
 
     shell.do_mv("old new")
 
-    assert not (tmp_path / "alice" / "old.json").exists()
-    assert (tmp_path / "alice" / "new.json").exists()
+    assert not (tmp_path / "alice" / "old").exists()
+    assert (tmp_path / "alice" / "new").exists()
 
 
 def test_mv_errors_when_source_missing(tmp_path, monkeypatch, capsys):
@@ -77,12 +77,12 @@ def test_mv_supports_quoted_names_with_spaces(tmp_path, monkeypatch):
 
     shell.do_mv('"old name" "new name"')
 
-    assert not (tmp_path / "alice" / "old name.json").exists()
-    assert (tmp_path / "alice" / "new name.json").exists()
+    assert not (tmp_path / "alice" / "old name").exists()
+    assert (tmp_path / "alice" / "new name").exists()
 
 
 def test_mv_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, capsys):
-    """mv currently appends .json, so passing .json in source should fail lookup."""
+    """mv treats a .json suffix literally when looking up the source path."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     track_file(shell, File.create(tmp_path / "alice", "old", "alice"))
 
