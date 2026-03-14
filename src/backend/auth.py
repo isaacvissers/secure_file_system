@@ -1,6 +1,6 @@
 import hashlib
 import json
-import secrets
+import os
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -254,7 +254,7 @@ def create_user(
     if is_admin and username == ADMIN:
         user_key = get_admin_key()
     else:
-        user_key = secrets.token_hex(16)
+        user_key = os.urandom(16).hex()
 
     user_dict: UserDict = {
         "username": username,
