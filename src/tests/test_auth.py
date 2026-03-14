@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 
 import backend.auth as auth
 from scripts import create_admin
@@ -13,11 +14,21 @@ def test_create_user_key_and_admin_key():
 
 def test_save_and_load_user_without_admin_index(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-    user = {"username": "bob", "file_keys": [], "group_keys": []}
-    key = auth.create_admin_login_token("bob", "pw")
-    auth.save_user(key, user)
+    auth.save_admin_record(
+        {
+            "username": "admin",
+            "file_keys": {},
+            "group_keys": {},
+            "user_keys": {},
+        }
+    )
 
-    # load_user should find by scanning when no admin exists
+    user = {"username": "bob", "file_keys": [], "group_keys": []}
+    key = os.urandom(16).hex()
+    record_key = os.urandom(32)
+    auth.save_user(key, user, record_key=record_key)
+    auth.add_user_key_to_admin("bob", key, record_key.hex())
+
     loaded = auth.load_user("bob")
     assert loaded is not None and loaded["username"] == "bob"
 
@@ -44,14 +55,13 @@ def test_create_user_writes_file_and_updates_admin_index(tmp_path, monkeypatch):
 
     # create an admin record first so create_user will add mapping
     admin_key = auth.get_admin_key()
-    auth.save_user(
-        admin_key,
+    auth.save_admin_record(
         {
             "username": "admin",
             "file_keys": {},
             "group_keys": {},
             "user_keys": {},
-        },
+        }
     )
 
     # Create the "all" group
@@ -67,7 +77,14 @@ def test_create_user_writes_file_and_updates_admin_index(tmp_path, monkeypatch):
     admin_data = auth.get_admin_record()
     assert admin_data is not None
 
-    user_key = admin_data.user_keys.get("carol")
+    entry = admin_data.user_keys.get("carol")
+    if isinstance(entry, dict):
+        user_key = entry.get("id")
+        record_key_hex = entry.get("record_key")
+        assert isinstance(record_key_hex, str) and len(record_key_hex) == 64
+    else:
+        user_key = entry
+
     assert isinstance(user_key, str) and len(user_key) > 0
     assert user_key != auth.create_admin_login_token("carol", "secret")
     assert (users_dir / f"{user_key}.json").exists()
@@ -75,18 +92,32 @@ def test_create_user_writes_file_and_updates_admin_index(tmp_path, monkeypatch):
 
 def test_user_exists_and_get_admin_record(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-    # write a simple user file
-    user_key = auth.create_admin_login_token("dana", "pw")
-    auth.save_user(user_key, {"username": "dana", "file_keys": [], "group_keys": []})
+    auth.save_admin_record(
+        {
+            "username": "admin",
+            "file_keys": {},
+            "group_keys": {},
+            "user_keys": {},
+        }
+    )
+    user_key = os.urandom(16).hex()
+    user_record_key = os.urandom(32)
+    auth.save_user(
+        user_key,
+        {"username": "dana", "file_keys": [], "group_keys": []},
+        record_key=user_record_key,
+    )
+    auth.add_user_key_to_admin("dana", user_key, user_record_key.hex())
 
     assert auth.user_exists("dana") is True
     assert auth.user_exists("nope") is False
 
     # test get_admin_record returns None when missing and AdminUser when present
+    monkeypatch.setattr(auth, "USERS_DIR", tmp_path / "missing")
     assert auth.get_admin_record() is None
+    monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
     admin_key = auth.get_admin_key()
-    auth.save_user(
-        admin_key,
+    auth.save_admin_record(
         {"username": "admin", "file_keys": {}, "group_keys": {}, "user_keys": {}},
     )
     admin = auth.get_admin_record()
@@ -97,19 +128,17 @@ def test_user_exists_and_get_admin_record(tmp_path, monkeypatch):
 def test_resolve_user_with_admin_index(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
     # prepare user file and admin mapping
-    key = auth.create_admin_login_token("erin", "pw")
-    auth.save_user(key, {"username": "erin", "file_keys": [], "group_keys": []})
-
-    admin_key = auth.get_admin_key()
-    auth.save_user(
-        admin_key,
-        {
-            "username": "admin",
-            "file_keys": {},
-            "group_keys": {},
-            "user_keys": {"erin": key},
-        },
+    auth.save_admin_record(
+        {"username": "admin", "file_keys": {}, "group_keys": {}, "user_keys": {}}
     )
+    key = os.urandom(16).hex()
+    record_key = os.urandom(32)
+    auth.save_user(
+        key,
+        {"username": "erin", "file_keys": [], "group_keys": []},
+        record_key=record_key,
+    )
+    auth.add_user_key_to_admin("erin", key, record_key.hex())
 
     admin = auth.get_admin_record()
     assert admin is not None

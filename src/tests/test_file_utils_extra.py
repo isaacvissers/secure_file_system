@@ -32,7 +32,7 @@ def test_get_user_file_keys_and_add_file_to_group_propagation(tmp_path, monkeypa
         "user_keys": {},
         "group_keys": {},
     }
-    auth.save_user(admin_key, admin_record)
+    auth.save_admin_record(admin_record)
 
     # create user and group, add user to group
     assert auth.create_user("alice", "pw", is_admin=False) is not None
@@ -78,7 +78,7 @@ def test_add_file_to_user_accepts_directory_object(tmp_path, monkeypatch):
         "user_keys": {},
         "group_keys": {},
     }
-    auth.save_user(admin_key, admin_record)
+    auth.save_admin_record(admin_record)
 
     assert auth.create_user("carol", "pw", is_admin=False) is not None
 
@@ -122,7 +122,7 @@ def test_add_file_to_group_stores_hex_for_bytes(tmp_path, monkeypatch):
         "user_keys": {},
         "group_keys": {},
     }
-    auth.save_user(admin_key, admin_record)
+    auth.save_admin_record(admin_record)
 
     assert create_group("dev") is not None
 
@@ -157,7 +157,7 @@ def test_add_file_to_user_and_groups_accepts_hex_string(tmp_path, monkeypatch):
         "user_keys": {},
         "group_keys": {},
     }
-    auth.save_user(admin_key, admin_record)
+    auth.save_admin_record(admin_record)
 
     assert auth.create_user("dave", "pw", is_admin=False) is not None
     assert group_utils.create_group("ops") is not None

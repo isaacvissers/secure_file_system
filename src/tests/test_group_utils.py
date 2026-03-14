@@ -117,7 +117,7 @@ def test_add_user_to_group(temp_storage, admin_user, all_group, normal_user):
 
     # Check group updated
     group = group_utils.load_group("design")
-    user_key = admin.user_keys["alice"]
+    user_key = auth.get_user_storage_key(admin, "alice")
     assert user_key in group["members"]
     assert group["members"][user_key] == "alice"
 
@@ -152,7 +152,7 @@ def test_new_user_automatically_added_to_all_group(temp_storage, admin_user, all
     # Verify user was added to "all" group
     all_group_data = group_utils.load_group("all")
     admin = auth.get_admin_record()
-    bob_user_key = admin.user_keys["bob"]
+    bob_user_key = auth.get_user_storage_key(admin, "bob")
     assert bob_user_key in all_group_data["members"]
     assert all_group_data["members"][bob_user_key] == "bob"
 

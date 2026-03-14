@@ -142,7 +142,7 @@ def test_add_file_to_user_stores_hex_for_bytes(tmp_path, monkeypatch):
         "user_keys": {},
         "group_keys": {},
     }
-    auth.save_user(admin_key, admin_record)
+    auth.save_admin_record(admin_record)
     group_utils.create_group("all")
 
     created = auth.create_user("bob", "pw", is_admin=False)
@@ -179,7 +179,7 @@ def test_add_file_to_user_with_directory_object(tmp_path, monkeypatch):
         "user_keys": {},
         "group_keys": {},
     }
-    auth.save_user(admin_key, admin_record)
+    auth.save_admin_record(admin_record)
     group_utils.create_group("all")
 
     created = auth.create_user("carol", "pw", is_admin=False)

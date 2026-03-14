@@ -23,7 +23,7 @@ FILES_DIR = SRC_DIR / "storage/files"
 FILES_DIR.mkdir(parents=True, exist_ok=True)
 
 ADMIN = "admin"
-USER_FILENAME_SALT = "user_record_salt_v1"
+ADMIN_RECORD_KEY_SALT = "admin_record_salt_v1"
 ADMIN_FILENAME_SALT = "admin_filename_salt_v1"
 
 UserDict = Dict[str, Any]
@@ -102,22 +102,15 @@ def _read_record_bytes(path: Path) -> Optional[bytes]:
         return None
 
 
-def _serialize_user_record(user_key: str, user_dict: UserDict) -> bytes:
-    """Serialize user records as raw encrypted bytes (nonce + ciphertext)."""
-    key = _derive_user_record_key(user_key)
-    return encrypt_with_key(json.dumps(user_dict).encode("utf-8"), key)
-
-
 def _deserialize_user_record(
-    user_key: str, record: Optional[bytes]
+    record: Optional[bytes], record_key: bytes
 ) -> Optional[UserDict]:
     """Deserialize encrypted user bytes."""
     if record is None:
         return None
 
     try:
-        key = _derive_user_record_key(user_key)
-        decrypted = decrypt_with_key(record, key)
+        decrypted = decrypt_with_key(record, record_key)
         user_data = json.loads(decrypted.decode("utf-8"))
     except Exception:
         return None
@@ -127,9 +120,40 @@ def _deserialize_user_record(
     return user_data
 
 
-def _derive_user_record_key(user_key: str) -> bytes:
-    material = f"{USER_FILENAME_SALT}:{user_key}".encode("utf-8")
+def _derive_admin_record_key(admin_key: str) -> bytes:
+    material = f"{ADMIN_RECORD_KEY_SALT}:{admin_key}".encode("utf-8")
     return hashlib.sha256(material).digest()
+
+
+def _parse_user_index_entry(entry: Any) -> Tuple[Optional[str], Optional[bytes]]:
+    if not isinstance(entry, dict):
+        return None, None
+
+    user_key = entry.get("id")
+    record_key_hex = entry.get("record_key")
+    record_key: Optional[bytes] = None
+    if isinstance(record_key_hex, str):
+        try:
+            record_key = bytes.fromhex(record_key_hex)
+        except ValueError:
+            record_key = None
+
+    if isinstance(user_key, str) and record_key is not None:
+        return user_key, record_key
+
+    return None, None
+
+
+def get_user_storage_key(admin: AdminUser, username: str) -> Optional[str]:
+    user_key, _ = _parse_user_index_entry(getattr(admin, "user_keys", {}).get(username))
+    return user_key
+
+
+def get_user_record_key(admin: AdminUser, username: str) -> Optional[bytes]:
+    _, record_key = _parse_user_index_entry(
+        getattr(admin, "user_keys", {}).get(username)
+    )
+    return record_key
 
 
 def verify_user_password(user_dict: UserDict, password: str) -> bool:
@@ -150,7 +174,7 @@ def get_admin_record() -> Optional[AdminUser]:
     """Return the AdminUser object if exists."""
     admin_key = get_admin_key()
     raw = _read_record_bytes(_user_file_path(admin_key))
-    data = _deserialize_user_record(admin_key, raw)
+    data = _deserialize_user_record(raw, _derive_admin_record_key(admin_key))
     if data is None:
         return None
 
@@ -171,7 +195,10 @@ def _get_admin_or_fail(admin: Optional[AdminUser] = None) -> Optional[AdminUser]
 
 
 def add_user_key_to_admin(
-    username: str, user_key: str, admin: Optional[AdminUser] = None
+    username: str,
+    user_key: str,
+    record_key_hex: str,
+    admin: Optional[AdminUser] = None,
 ) -> Optional[AdminUser]:
     admin = _get_admin_or_fail(admin)
     if not admin:
@@ -180,8 +207,8 @@ def add_user_key_to_admin(
     if getattr(admin, "user_keys", None) is None:
         admin.user_keys = {}
 
-    admin.user_keys[username] = user_key
-    save_user(get_admin_key(), admin.__dict__)
+    admin.user_keys[username] = {"id": user_key, "record_key": record_key_hex}
+    save_admin_record(admin.__dict__)
     return admin
 
 
@@ -190,43 +217,34 @@ def add_user_key_to_admin(
 # --------------------
 
 
-def save_user(user_key: str, user_dict: UserDict) -> None:
+def save_user(user_key: str, user_dict: UserDict, record_key: bytes) -> None:
     """Save user record to disk (serialization hook supports future encryption)."""
     path = _user_file_path(user_key)
-    payload = _serialize_user_record(user_key, user_dict)
+    payload = encrypt_with_key(json.dumps(user_dict).encode("utf-8"), record_key)
     path.write_bytes(payload)
 
 
-def _load_user_by_key(user_key: str) -> Optional[UserDict]:
+def save_admin_record(admin_dict: UserDict) -> None:
+    admin_key = get_admin_key()
+    save_user(admin_key, admin_dict, record_key=_derive_admin_record_key(admin_key))
+
+
+def _load_user_by_key(user_key: str, record_key: bytes) -> Optional[UserDict]:
     raw = _read_record_bytes(_user_file_path(user_key))
-    return _deserialize_user_record(user_key, raw)
-
-
-def _scan_user_by_username(username: str) -> Optional[UserDict]:
-    for path in USERS_DIR.glob("*.json"):
-        raw = _read_record_bytes(path)
-        data = _deserialize_user_record(path.stem, raw)
-        if data and data.get("username") == username:
-            return data
-    return None
+    return _deserialize_user_record(raw, record_key)
 
 
 def load_user(username: str, admin: Optional[AdminUser] = None) -> Optional[UserDict]:
-    """Load user by username, using admin index first, then fallback scan."""
-    admin_supplied = admin is not None
+    """Load user by username using strict admin index entry (id + record_key)."""
     admin = admin or get_admin_record()
-
-    if admin and getattr(admin, "user_keys", None):
-        user_key = admin.user_keys.get(username)
-        if user_key:
-            return _load_user_by_key(user_key)
-        if admin_supplied:
-            return None
-
-    if admin_supplied:
+    if not admin or not getattr(admin, "user_keys", None):
         return None
 
-    return _scan_user_by_username(username)
+    user_key = get_user_storage_key(admin, username)
+    record_key = get_user_record_key(admin, username)
+    if not user_key or not record_key:
+        return None
+    return _load_user_by_key(user_key, record_key)
 
 
 def user_exists(username: str, admin: Optional[AdminUser] = None) -> bool:
@@ -253,8 +271,10 @@ def create_user(
 
     if is_admin and username == ADMIN:
         user_key = get_admin_key()
+        record_key = _derive_admin_record_key(user_key)
     else:
         user_key = os.urandom(16).hex()
+        record_key = os.urandom(32)
 
     user_dict: UserDict = {
         "username": username,
@@ -270,8 +290,13 @@ def create_user(
         user_dict["auth_salt"] = auth_salt
         user_dict["auth_verifier"] = auth_verifier
 
-    save_user(user_key, user_dict)
-    admin = add_user_key_to_admin(username, user_key, admin=admin)
+    save_user(user_key, user_dict, record_key=record_key)
+    admin = add_user_key_to_admin(
+        username,
+        user_key,
+        record_key_hex=record_key.hex(),
+        admin=admin,
+    )
 
     if not is_admin:
         create_user_directory(user_dict["username"])
@@ -300,7 +325,7 @@ def _resolve_user(
     admin: AdminUser, username: str
 ) -> Tuple[Optional[str], Optional[UserDict]]:
     """Return (user_key, user_dict). Print errors if missing."""
-    user_key = admin.user_keys.get(username)
+    user_key = get_user_storage_key(admin, username)
     if not user_key:
         print(f"User '{username}' not found.")
         return None, None

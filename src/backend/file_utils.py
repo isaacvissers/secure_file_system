@@ -1,6 +1,12 @@
 from typing import Any
 
-from backend.auth import _get_admin_or_fail, load_user, save_user
+from backend.auth import (
+    _get_admin_or_fail,
+    get_user_record_key,
+    get_user_storage_key,
+    load_user,
+    save_user,
+)
 from backend.group_utils import get_user_groups_by_username, load_group, save_group
 
 FILE_INDEX = "encrypted_name"
@@ -93,8 +99,11 @@ def add_file_to_user(
     if not admin:
         return None
 
-    user_key = getattr(admin, "user_keys", {}).get(username)
+    user_key = get_user_storage_key(admin, username)
     if not user_key:
+        return False
+    user_record_key = get_user_record_key(admin, username)
+    if not user_record_key:
         return False
 
     user = load_user(username, admin=admin)
@@ -106,7 +115,7 @@ def add_file_to_user(
 
     fk = _normalize_file_key(file_key)
     user["file_keys"][file_name] = fk
-    save_user(user_key, user)
+    save_user(user_key, user, record_key=user_record_key)
 
     return True
 

@@ -75,7 +75,7 @@ def _auth_module():
 
 def _save_admin_group_index(admin: "AdminUser") -> None:
     auth = _auth_module()
-    auth.save_user(auth.get_admin_key(), admin.__dict__)
+    auth.save_admin_record(admin.__dict__)
 
 
 def load_group(name: str, admin: Optional["AdminUser"] = None) -> Optional[GroupsDict]:
@@ -144,7 +144,7 @@ def get_user_groups_by_username(
     if not admin:
         print("Admin record not found.")
         return []
-    user_key = admin.user_keys.get(username)
+    user_key = auth.get_user_storage_key(admin, username)
     if not user_key:
         print(f"User '{username}' not found.")
         return []
@@ -185,7 +185,7 @@ def add_user_to_group(
         print(f"Group '{group_name}' not found.")
         return False
 
-    user_key = admin.user_keys.get(username)
+    user_key = auth.get_user_storage_key(admin, username)
     if not user_key:
         print(f"User '{username}' not found.")
         return False
@@ -200,13 +200,18 @@ def add_user_to_group(
         print("User file not found.")
         return False
 
+    user_record_key = auth.get_user_record_key(admin, username)
+    if not user_record_key:
+        print("User key metadata missing.")
+        return False
+
     if not _add_member_to_group(group, username, user_key):
         return False
 
     _add_group_to_user(user, group_key)
 
     save_group(group_key, group)
-    auth.save_user(user_key, user)
+    auth.save_user(user_key, user, record_key=user_record_key)
 
     return True
 
@@ -250,7 +255,7 @@ def remove_user_from_group(
         print(f"Group '{group_name}' not found.")
         return False
 
-    user_key = admin.user_keys.get(username)
+    user_key = auth.get_user_storage_key(admin, username)
     if not user_key:
         print(f"User '{username}' not found.")
         return False
@@ -274,11 +279,16 @@ def remove_user_from_group(
         print("User file not found.")
         return False
 
+    user_record_key = auth.get_user_record_key(admin, username)
+    if not user_record_key:
+        print("User key metadata missing.")
+        return False
+
     gkeys = user.setdefault("group_keys", [])
     if group_key in gkeys:
         gkeys.remove(group_key)
 
     save_group(group_key, group)
-    auth.save_user(user_key, user)
+    auth.save_user(user_key, user, record_key=user_record_key)
 
     return True
