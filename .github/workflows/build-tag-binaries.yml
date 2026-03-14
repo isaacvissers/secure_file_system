@@ -42,13 +42,22 @@ jobs:
             --paths src \
             src/scripts/create_admin.py
 
+      - name: Package release binaries
+        run: |
+          mkdir -p release-assets
+          cp dist/secure-fs release-assets/secure-fs-linux-x86_64
+          cp dist/secure-fs-admin-setup release-assets/secure-fs-admin-setup-linux-x86_64
+          chmod +x release-assets/secure-fs-linux-x86_64 release-assets/secure-fs-admin-setup-linux-x86_64
+          tar -C release-assets -czf release-assets/secure-fs-linux-x86_64-${{ github.ref_name }}.tar.gz secure-fs-linux-x86_64
+          tar -C release-assets -czf release-assets/secure-fs-admin-setup-linux-x86_64-${{ github.ref_name }}.tar.gz secure-fs-admin-setup-linux-x86_64
+
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
           name: secure-fs-binaries-${{ github.ref_name }}
           path: |
-            dist/secure-fs
-            dist/secure-fs-admin-setup
+            release-assets/secure-fs-linux-x86_64-${{ github.ref_name }}.tar.gz
+            release-assets/secure-fs-admin-setup-linux-x86_64-${{ github.ref_name }}.tar.gz
           if-no-files-found: error
 
       - name: Create release and attach binaries
@@ -56,5 +65,5 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           files: |
-            dist/secure-fs
-            dist/secure-fs-admin-setup
+            release-assets/secure-fs-linux-x86_64-${{ github.ref_name }}.tar.gz
+            release-assets/secure-fs-admin-setup-linux-x86_64-${{ github.ref_name }}.tar.gz
