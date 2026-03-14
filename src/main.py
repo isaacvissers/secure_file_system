@@ -132,6 +132,20 @@ class SecureFS(cmd.Cmd):
                 FILES_DIR / hashlib.sha256(username.encode("utf-8")).hexdigest()
             )
 
+            # Check owned files recursively for offline tampering.
+            compromised_paths = []
+            if self.current_working_directory.exists():
+                compromised_paths = check_user_file_integrities(
+                    self.current_user,
+                    self.current_working_directory,
+                )
+
+            if compromised_paths:
+                print("Warning: The following files may have been compromised:")
+                print()
+                for path in compromised_paths:
+                    print(f"- {path}")
+
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
@@ -263,21 +277,10 @@ class SecureFS(cmd.Cmd):
             if entry.is_dir():
                 metadata_path = self.current_working_directory / f".{entry.name}"
                 if metadata_path.exists():
-                    try:
-                        file_key_hex = self.current_user["file_keys"].get(
-                            str(metadata_path)
-                        )
-                        if file_key_hex:
-                            file_key = bytes.fromhex(file_key_hex)
-                            metadata_file = File.get_file(metadata_path, file_key)
-                            decrypted_name = metadata_file.file_name.lstrip(".")
-                            print(f"{decrypted_name}/")
-                        else:
-                            print(
-                                f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
-                            )
-                            print(f"{entry.name}/")
-                    except Exception:
+                    decrypted_dir = try_decrypt_directory(metadata_path, self.current_user["file_keys"].get(str(metadata_path)))
+                    if decrypted_dir:
+                        print(f"{decrypted_dir.file_name.lstrip('.')}/")
+                    else:
                         print(
                             f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
                         )
@@ -286,18 +289,13 @@ class SecureFS(cmd.Cmd):
                 continue
             else:
                 file_key_hex = self.current_user["file_keys"].get(str(entry))
-                if file_key_hex:
-                    try:
-                        file_key = bytes.fromhex(file_key_hex)
-                        file = File.get_file(entry, file_key)
-                        print(file.file_name)
-                    except Exception:
-                        print(
-                            f"Error decrypting file {entry}, displaying encrypted name."
-                        )
-                        print(entry.name)
+                decrypted_file = try_decrypt_file(entry, file_key_hex)
+                if decrypted_file:
+                    print(decrypted_file.file_name)
                 else:
-                    print(f"Error decrypting file {entry}, displaying encrypted name.")
+                    print(
+                        f"Error decrypting file {entry}, displaying encrypted name."
+                    )
                     print(entry.name)
 
     @requires_login
