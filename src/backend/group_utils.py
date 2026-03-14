@@ -29,6 +29,47 @@ def _group_file(group_key: str) -> Path:
     return GROUPS_DIR / f"{group_key}.json"
 
 
+def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_json(path: Path, payload: Dict[str, Any]) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+
+
+def _serialize_group_record(group_key: str, group_dict: GroupsDict) -> Dict[str, Any]:
+    """Serialization hook for group records (future: encrypt here)."""
+    _ = group_key
+    return group_dict
+
+
+def _deserialize_group_record(
+    group_key: str, record: Optional[Dict[str, Any]]
+) -> Optional[GroupsDict]:
+    """Deserialization hook for group records (future: decrypt here)."""
+    _ = group_key
+    if not isinstance(record, dict):
+        return None
+    return record
+
+
+def _load_group_by_key(group_key: str) -> Optional[GroupsDict]:
+    raw = _read_json(_group_file(group_key))
+    return _deserialize_group_record(group_key, raw)
+
+
+def _save_admin_group_index(admin: auth.AdminUser) -> None:
+    auth.save_user(auth.get_admin_key(), admin.__dict__)
+
+
 def load_group(
     name: str, admin: Optional[auth.AdminUser] = None
 ) -> Optional[GroupsDict]:
@@ -40,18 +81,12 @@ def load_group(
     if not group_key:
         return None
 
-    path = _group_file(group_key)
-    if not path.exists():
-        return None
-
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return _load_group_by_key(group_key)
 
 
 def save_group(group_key: str, group_dict: GroupsDict) -> None:
-    path = _group_file(group_key)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(group_dict, f)
+    payload = _serialize_group_record(group_key, group_dict)
+    _write_json(_group_file(group_key), payload)
 
 
 # --------------------
@@ -82,7 +117,7 @@ def create_group(
     save_group(group_key, group)
 
     admin.group_keys[name] = group_key
-    auth.save_user(auth.get_admin_key(), admin.__dict__)
+    _save_admin_group_index(admin)
 
     return group
 
