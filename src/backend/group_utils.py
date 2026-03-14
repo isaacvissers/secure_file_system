@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import backend.auth as auth
+if TYPE_CHECKING:
+    from models.user import AdminUser
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 GROUPS_DIR = SRC_DIR / "storage/.groups"
@@ -66,13 +67,19 @@ def _load_group_by_key(group_key: str) -> Optional[GroupsDict]:
     return _deserialize_group_record(group_key, raw)
 
 
-def _save_admin_group_index(admin: auth.AdminUser) -> None:
+def _auth_module():
+    import backend.auth as auth
+
+    return auth
+
+
+def _save_admin_group_index(admin: "AdminUser") -> None:
+    auth = _auth_module()
     auth.save_user(auth.get_admin_key(), admin.__dict__)
 
 
-def load_group(
-    name: str, admin: Optional[auth.AdminUser] = None
-) -> Optional[GroupsDict]:
+def load_group(name: str, admin: Optional["AdminUser"] = None) -> Optional[GroupsDict]:
+    auth = _auth_module()
     admin = admin or auth.get_admin_record()
     if not admin:
         return None
@@ -95,8 +102,9 @@ def save_group(group_key: str, group_dict: GroupsDict) -> None:
 
 
 def create_group(
-    name: str, admin: Optional[auth.AdminUser] = None
+    name: str, admin: Optional["AdminUser"] = None
 ) -> Optional[GroupsDict]:
+    auth = _auth_module()
     admin = admin or auth.get_admin_record()
     if not admin:
         print("Admin record not found.")
@@ -129,8 +137,9 @@ def create_group(
 
 def get_user_groups_by_username(
     username: str,
-    admin: Optional[auth.AdminUser] = None,
+    admin: Optional["AdminUser"] = None,
 ) -> List[str]:
+    auth = _auth_module()
     admin = admin or auth.get_admin_record()
     if not admin:
         print("Admin record not found.")
@@ -163,8 +172,9 @@ def get_user_groups_by_username(
 def add_user_to_group(
     group_name: str,
     username: str,
-    admin: Optional[auth.AdminUser] = None,
+    admin: Optional["AdminUser"] = None,
 ) -> bool:
+    auth = _auth_module()
     admin = admin or auth.get_admin_record()
     if not admin:
         print("Admin record not found.")
@@ -227,8 +237,9 @@ def _add_group_to_user(user: dict, group_key: str):
 def remove_user_from_group(
     group_name: str,
     username: str,
-    admin: Optional[auth.AdminUser] = None,
+    admin: Optional["AdminUser"] = None,
 ) -> bool:
+    auth = _auth_module()
     admin = admin or auth.get_admin_record()
     if not admin:
         print("Admin record not found.")
