@@ -23,18 +23,18 @@ def _home_path(base: Path, username: str) -> Path:
 
 @pytest.fixture
 def temp_files_dir(monkeypatch):
-    """Redirect FILES_DIR to a temporary folder and patch create_user_key."""
+    """Redirect FILES_DIR to a temporary folder and patch admin login token helper."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         # Patch FILES_DIR everywhere it's used
         monkeypatch.setattr(auth, "FILES_DIR", tmp_path)
         monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-        # Patch create_user_key to return the username for simplicity
+        # Patch admin token helper to return the username for simplicity
         monkeypatch.setattr(
-            auth, "create_user_key", lambda username, password: username
+            auth, "create_admin_login_token", lambda username, password: username
         )
         monkeypatch.setattr(
-            main_module, "create_user_key", lambda username, password: username
+            main_module, "create_admin_login_token", lambda username, password: username
         )
         yield tmp_path
 
@@ -73,6 +73,7 @@ def test_login_success(monkeypatch, capsys, temp_files_dir):
     monkeypatch.setattr(
         auth, "_resolve_user", lambda admin, username: ("alice", user_data)
     )
+    monkeypatch.setattr(auth, "verify_user_password", lambda user, password: True)
 
     shell = SecureFS()
     shell.do_login("")
@@ -141,6 +142,7 @@ def test_login_sets_correct_working_directory(monkeypatch, temp_files_dir):
     monkeypatch.setattr(
         auth, "_resolve_user", lambda admin, username: ("carol", user_data)
     )
+    monkeypatch.setattr(auth, "verify_user_password", lambda user, password: True)
 
     shell = SecureFS()
     shell.do_login("")
@@ -181,7 +183,7 @@ def test_login_fails_when_admin_missing(monkeypatch, capsys):
 
 
 def test_login_password_branch(monkeypatch, capsys, temp_files_dir):
-    """Simulate wrong password / placeholder logic."""
+    """Login succeeds when verifier check passes."""
     user_data = _make_user("alice")
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("alice", "wrong"))
     monkeypatch.setattr(main_module, "load_user", lambda username: user_data)
@@ -193,13 +195,11 @@ def test_login_password_branch(monkeypatch, capsys, temp_files_dir):
     monkeypatch.setattr(
         auth, "_resolve_user", lambda admin, username: ("alice", user_data)
     )
-    monkeypatch.setattr(
-        auth, "create_user_key", lambda username, password: "alice"
-    )  # bypass password check
+    monkeypatch.setattr(auth, "verify_user_password", lambda user, password: True)
 
     shell = SecureFS()
     shell.do_login("")
 
-    # Should succeed because current placeholder logic does not verify password
+    # Should succeed because verifier check is mocked as passing
     assert shell.current_user == user_data
     assert shell.prompt == f"SFS/{_home_path(temp_files_dir, 'alice').name}> "

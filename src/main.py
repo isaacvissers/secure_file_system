@@ -120,7 +120,7 @@ class SecureFS(cmd.Cmd):
 
         if username == ADMIN:
             # Use the AdminUser object for admin login
-            expected_key = auth.create_user_key(username, password)
+            expected_key = auth.create_admin_login_token(username, password)
             admin_key = auth.get_admin_key()
             if expected_key != admin_key:
                 print("Error: Incorrect password.")
@@ -136,8 +136,7 @@ class SecureFS(cmd.Cmd):
                 print(f"Error: User '{username}' does not exist.")
                 return
 
-            expected_key = auth.create_user_key(username, password)
-            if user_key != expected_key:
+            if not auth.verify_user_password(user_dict, password):
                 print("Error: Incorrect password.")
                 return
 

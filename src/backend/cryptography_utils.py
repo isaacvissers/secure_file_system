@@ -1,5 +1,6 @@
 import os
 
+from cryptography.hazmat.primitives import constant_time
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 
@@ -33,3 +34,19 @@ def decrypt_with_key(encrypted_data: bytes, key: bytes) -> bytes:
     ciphertext = encrypted_data[12:]
     aesgcm = AESGCM(key)
     return aesgcm.decrypt(nonce, ciphertext, None)
+
+
+def verify_password(password: str, salt_hex: str, verifier_hex: str) -> bool:
+    try:
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(verifier_hex)
+        candidate = derive_key_from_password(password, salt)
+    except Exception:
+        return False
+    return constant_time.bytes_eq(candidate, expected)
+
+
+def create_password_to_verify(password: str, salt_bytes: int = 16) -> tuple[str, str]:
+    salt = os.urandom(salt_bytes)
+    verifier = derive_key_from_password(password, salt)
+    return salt.hex(), verifier.hex()

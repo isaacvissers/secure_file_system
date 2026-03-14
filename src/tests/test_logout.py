@@ -95,7 +95,7 @@ def test_logout_leaves_shell_usable_for_new_login(monkeypatch):
         lambda admin, username: ("fake_key", new_user_data),
     )
     monkeypatch.setattr(
-        main_module.auth, "create_user_key", lambda username, password: "fake_key"
+        main_module.auth, "verify_user_password", lambda user, password: True
     )
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("bob", "pass"))
 

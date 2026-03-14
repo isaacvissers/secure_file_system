@@ -1,8 +1,16 @@
+import hashlib
 import json
+import secrets
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from backend.cryptography_utils import (
+    create_password_to_verify,
+    decrypt_with_key,
+    encrypt_with_key,
+    verify_password,
+)
 from backend.group_utils import add_user_to_group, create_group, load_group
 from models.directory import Directory
 from models.user import AdminUser
@@ -15,7 +23,8 @@ FILES_DIR = SRC_DIR / "storage/files"
 FILES_DIR.mkdir(parents=True, exist_ok=True)
 
 ADMIN = "admin"
-SALT = "psalt"
+USER_FILENAME_SALT = "user_record_salt_v1"
+ADMIN_FILENAME_SALT = "admin_filename_salt_v1"
 
 UserDict = Dict[str, Any]
 
@@ -63,49 +72,73 @@ def requires_logged_out(func):
 # --------------------
 
 
-def create_user_key(username: str, password: str) -> str:
-    """Generate a user key. Replace with proper encryption later."""
-    return f"{username}_{password}_{SALT}"
+def create_admin_login_token(username: str, password: str) -> str:
+    """Derive a deterministic token string used for admin bootstrap/auth checks."""
+    return f"{username}_{password}"
 
 
 def get_admin_key() -> str:
-    return create_user_key(ADMIN, ADMIN)
+    return create_admin_login_token(ADMIN, ADMIN)
+
+
+def _get_admin_storage_name() -> str:
+    material = f"{ADMIN_FILENAME_SALT}:{ADMIN}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
 
 
 def _user_file_path(user_key: str) -> Path:
-    return USERS_DIR / f"{user_key}.json"
+    storage_name = (
+        _get_admin_storage_name() if user_key == get_admin_key() else user_key
+    )
+    return USERS_DIR / f"{storage_name}.json"
 
 
-def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+def _read_record_bytes(path: Path) -> Optional[bytes]:
     if not path.exists():
         return None
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        return path.read_bytes()
     except Exception:
         return None
-    return data if isinstance(data, dict) else None
 
 
-def _write_json(path: Path, payload: Dict[str, Any]) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f)
-
-
-def _serialize_user_record(user_key: str, user_dict: UserDict) -> Dict[str, Any]:
-    """Serialization hook for user records (future: encrypt here)."""
-    _ = user_key
-    return user_dict
+def _serialize_user_record(user_key: str, user_dict: UserDict) -> bytes:
+    """Serialize user records as raw encrypted bytes (nonce + ciphertext)."""
+    key = _derive_user_record_key(user_key)
+    return encrypt_with_key(json.dumps(user_dict).encode("utf-8"), key)
 
 
 def _deserialize_user_record(
-    user_key: str, record: Optional[Dict[str, Any]]
+    user_key: str, record: Optional[bytes]
 ) -> Optional[UserDict]:
-    """Deserialization hook for user records (future: decrypt here)."""
-    _ = user_key
-    if not isinstance(record, dict):
+    """Deserialize encrypted user bytes."""
+    if record is None:
         return None
-    return record
+
+    try:
+        key = _derive_user_record_key(user_key)
+        decrypted = decrypt_with_key(record, key)
+        user_data = json.loads(decrypted.decode("utf-8"))
+    except Exception:
+        return None
+
+    if not isinstance(user_data, dict):
+        return None
+    return user_data
+
+
+def _derive_user_record_key(user_key: str) -> bytes:
+    material = f"{USER_FILENAME_SALT}:{user_key}".encode("utf-8")
+    return hashlib.sha256(material).digest()
+
+
+def verify_user_password(user_dict: UserDict, password: str) -> bool:
+    salt_hex = user_dict.get("auth_salt")
+    verifier_hex = user_dict.get("auth_verifier")
+    if isinstance(salt_hex, str) and isinstance(verifier_hex, str):
+        return verify_password(password, salt_hex, verifier_hex)
+
+    return False
 
 
 # --------------------
@@ -116,7 +149,7 @@ def _deserialize_user_record(
 def get_admin_record() -> Optional[AdminUser]:
     """Return the AdminUser object if exists."""
     admin_key = get_admin_key()
-    raw = _read_json(_user_file_path(admin_key))
+    raw = _read_record_bytes(_user_file_path(admin_key))
     data = _deserialize_user_record(admin_key, raw)
     if data is None:
         return None
@@ -128,10 +161,6 @@ def get_admin_record() -> Optional[AdminUser]:
         "user_keys": data.get("user_keys", {}),
     }
     return AdminUser(**admin_payload)
-
-
-def _save_admin_record(admin: AdminUser) -> None:
-    save_user(get_admin_key(), admin.__dict__)
 
 
 def _get_admin_or_fail(admin: Optional[AdminUser] = None) -> Optional[AdminUser]:
@@ -152,7 +181,7 @@ def add_user_key_to_admin(
         admin.user_keys = {}
 
     admin.user_keys[username] = user_key
-    _save_admin_record(admin)
+    save_user(get_admin_key(), admin.__dict__)
     return admin
 
 
@@ -165,17 +194,17 @@ def save_user(user_key: str, user_dict: UserDict) -> None:
     """Save user record to disk (serialization hook supports future encryption)."""
     path = _user_file_path(user_key)
     payload = _serialize_user_record(user_key, user_dict)
-    _write_json(path, payload)
+    path.write_bytes(payload)
 
 
 def _load_user_by_key(user_key: str) -> Optional[UserDict]:
-    raw = _read_json(_user_file_path(user_key))
+    raw = _read_record_bytes(_user_file_path(user_key))
     return _deserialize_user_record(user_key, raw)
 
 
 def _scan_user_by_username(username: str) -> Optional[UserDict]:
     for path in USERS_DIR.glob("*.json"):
-        raw = _read_json(path)
+        raw = _read_record_bytes(path)
         data = _deserialize_user_record(path.stem, raw)
         if data and data.get("username") == username:
             return data
@@ -206,10 +235,6 @@ def user_exists(username: str, admin: Optional[AdminUser] = None) -> bool:
     return load_user(username, admin=admin) is not None
 
 
-def user_exists_with_admin(username: str, admin: Optional[AdminUser] = None) -> bool:
-    return user_exists(username, admin=admin)
-
-
 # --------------------
 # User Creation
 # --------------------
@@ -226,7 +251,11 @@ def create_user(
         print(f"User '{username}' already exists.")
         return None
 
-    user_key = create_user_key(username, password)
+    if is_admin and username == ADMIN:
+        user_key = get_admin_key()
+    else:
+        user_key = secrets.token_hex(16)
+
     user_dict: UserDict = {
         "username": username,
         "file_keys": {},
@@ -236,6 +265,10 @@ def create_user(
     if is_admin:
         user_dict["user_keys"] = {}
         user_dict["group_keys"] = {}
+    else:
+        auth_salt, auth_verifier = create_password_to_verify(password)
+        user_dict["auth_salt"] = auth_salt
+        user_dict["auth_verifier"] = auth_verifier
 
     save_user(user_key, user_dict)
     admin = add_user_key_to_admin(username, user_key, admin=admin)
