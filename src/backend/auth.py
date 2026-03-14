@@ -3,10 +3,9 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from backend.cryptography_utils import *
-from backend.group_utils import add_user_to_group, load_group, save_group
+from backend.group_utils import add_user_to_group, create_group, load_group
 from models.directory import Directory
-from models.user import AdminUser, User
+from models.user import AdminUser
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"
@@ -15,7 +14,6 @@ USERS_DIR.mkdir(parents=True, exist_ok=True)
 FILES_DIR = SRC_DIR / "storage/files"
 FILES_DIR.mkdir(parents=True, exist_ok=True)
 
-SALT_BYTES = 16
 ADMIN = "admin"
 SALT = "psalt"
 
@@ -78,6 +76,38 @@ def _user_file_path(user_key: str) -> Path:
     return USERS_DIR / f"{user_key}.json"
 
 
+def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_json(path: Path, payload: Dict[str, Any]) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+
+
+def _serialize_user_record(user_key: str, user_dict: UserDict) -> Dict[str, Any]:
+    """Serialization hook for user records (future: encrypt here)."""
+    _ = user_key
+    return user_dict
+
+
+def _deserialize_user_record(
+    user_key: str, record: Optional[Dict[str, Any]]
+) -> Optional[UserDict]:
+    """Deserialization hook for user records (future: decrypt here)."""
+    _ = user_key
+    if not isinstance(record, dict):
+        return None
+    return record
+
+
 # --------------------
 # Admin Utilities
 # --------------------
@@ -85,12 +115,23 @@ def _user_file_path(user_key: str) -> Path:
 
 def get_admin_record() -> Optional[AdminUser]:
     """Return the AdminUser object if exists."""
-    path = _user_file_path(get_admin_key())
-    if not path.exists():
+    admin_key = get_admin_key()
+    raw = _read_json(_user_file_path(admin_key))
+    data = _deserialize_user_record(admin_key, raw)
+    if data is None:
         return None
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-        return AdminUser(**data)
+
+    admin_payload = {
+        "username": data.get("username", ADMIN),
+        "file_keys": data.get("file_keys", {}),
+        "group_keys": data.get("group_keys", {}),
+        "user_keys": data.get("user_keys", {}),
+    }
+    return AdminUser(**admin_payload)
+
+
+def _save_admin_record(admin: AdminUser) -> None:
+    save_user(get_admin_key(), admin.__dict__)
 
 
 def _get_admin_or_fail(admin: Optional[AdminUser] = None) -> Optional[AdminUser]:
@@ -111,7 +152,7 @@ def add_user_key_to_admin(
         admin.user_keys = {}
 
     admin.user_keys[username] = user_key
-    save_user(get_admin_key(), admin.__dict__)
+    _save_admin_record(admin)
     return admin
 
 
@@ -121,44 +162,52 @@ def add_user_key_to_admin(
 
 
 def save_user(user_key: str, user_dict: UserDict) -> None:
-    """Save user JSON to disk (future: encrypt here)."""
+    """Save user record to disk (serialization hook supports future encryption)."""
     path = _user_file_path(user_key)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(user_dict, f)
+    payload = _serialize_user_record(user_key, user_dict)
+    _write_json(path, payload)
 
 
-def load_user(username: str, admin: Optional[AdminUser] = None) -> Optional[UserDict]:
-    """Load user by username, using admin index first, then fallback scan."""
-    admin = admin or get_admin_record()
-    if admin and getattr(admin, "user_keys", None):
-        user_key = admin.user_keys.get(username)
-        if user_key:
-            path = _user_file_path(user_key)
-            if path.exists():
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        return json.load(f)
-                except Exception:
-                    return None
+def _load_user_by_key(user_key: str) -> Optional[UserDict]:
+    raw = _read_json(_user_file_path(user_key))
+    return _deserialize_user_record(user_key, raw)
 
-    # fallback: scan all users
-    for f in USERS_DIR.glob("*.json"):
-        try:
-            with open(f, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-        except Exception:
-            continue
-        if data.get("username") == username:
+
+def _scan_user_by_username(username: str) -> Optional[UserDict]:
+    for path in USERS_DIR.glob("*.json"):
+        raw = _read_json(path)
+        data = _deserialize_user_record(path.stem, raw)
+        if data and data.get("username") == username:
             return data
     return None
 
 
-def user_exists(username: str) -> bool:
-    return load_user(username) is not None
+def load_user(username: str, admin: Optional[AdminUser] = None) -> Optional[UserDict]:
+    """Load user by username, using admin index first, then fallback scan."""
+    admin_supplied = admin is not None
+    admin = admin or get_admin_record()
+
+    if admin and getattr(admin, "user_keys", None):
+        user_key = admin.user_keys.get(username)
+        if user_key:
+            return _load_user_by_key(user_key)
+        if admin_supplied:
+            return None
+
+    if admin_supplied:
+        return None
+
+    return _scan_user_by_username(username)
+
+
+def user_exists(username: str, admin: Optional[AdminUser] = None) -> bool:
+    if admin and username in getattr(admin, "user_keys", {}):
+        return True
+    return load_user(username, admin=admin) is not None
 
 
 def user_exists_with_admin(username: str, admin: Optional[AdminUser] = None) -> bool:
-    return load_user(username, admin=admin) is not None
+    return user_exists(username, admin=admin)
 
 
 # --------------------
@@ -173,7 +222,7 @@ def create_user(
     admin: Optional[AdminUser] = None,
 ) -> Optional[UserDict]:
     """Create a new user or admin. Returns user dict."""
-    if user_exists_with_admin(username, admin=admin):
+    if user_exists(username, admin=admin):
         print(f"User '{username}' already exists.")
         return None
 
@@ -195,8 +244,6 @@ def create_user(
         create_user_directory(user_dict["username"])
 
         if load_group("all", admin=admin) is None:
-            from backend.group_utils import create_group
-
             create_group("all", admin=admin)
 
         added_to_group = add_user_to_group("all", username, admin=admin)
