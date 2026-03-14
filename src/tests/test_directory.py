@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 
 import pytest
 
@@ -19,19 +20,19 @@ def test_directory_create_returns_directory_instance(tmp_path):
 def test_directory_create_sets_path(tmp_path):
     """Directory.create() sets path to working_dir / name."""
     d = Directory.create(tmp_path, "mydir", "owner")
-    assert d.path == tmp_path / "mydir"
+    assert d.path == tmp_path / sha256("mydir".encode("utf-8")).hexdigest()
 
 
 def test_directory_create_creates_dir_on_disk(tmp_path):
     """Directory.create() creates the directory on the filesystem."""
     Directory.create(tmp_path, "newdir", "owner")
-    assert (tmp_path / "newdir").is_dir()
+    assert (tmp_path / sha256("newdir".encode("utf-8")).hexdigest()).is_dir()
 
 
 def test_directory_create_raises_when_already_exists(tmp_path):
     """Directory.create() raises an OSError if the directory already exists."""
-    (tmp_path / "exists").mkdir()
-    with pytest.raises(OSError):
+    (tmp_path / sha256("exists".encode("utf-8")).hexdigest()).mkdir()
+    with pytest.raises(FileExistsError):
         Directory.create(tmp_path, "exists", "owner")
 
 
@@ -49,20 +50,22 @@ def test_directory_create_attaches_metadata(tmp_path):
 def test_directory_metadata_file_name(tmp_path):
     """Directory metadata records the directory name."""
     d = Directory.create(tmp_path, "docs", "owner")
-    assert d.metadata.file_name == ".docs"
+    assert d.metadata.file_name == "docs"
 
 
 def test_directory_metadata_written_to_dotfile(tmp_path):
     """Directory.create() writes a dotfile metadata file."""
     Directory.create(tmp_path, "archive", "owner")
-    meta_file = tmp_path / ".archive"
+    meta_file = tmp_path / f".{sha256('archive'.encode('utf-8')).hexdigest()}"
     assert meta_file.exists()
 
 
 def test_directory_metadata_json_is_valid(tmp_path):
     """The encrypted metadata file decrypts to valid JSON."""
     directory = Directory.create(tmp_path, "archive", "owner")
-    loaded = File.get_file(tmp_path / ".archive", directory.metadata.encrypted_file_key)
+    loaded = File.get_file(
+        directory.metadata.path, directory.metadata.encrypted_file_key
+    )
     data = json.loads(loaded.to_json())
     for key in (
         "file_name",
@@ -79,8 +82,10 @@ def test_directory_metadata_json_is_valid(tmp_path):
 def test_directory_metadata_file_name_in_json(tmp_path):
     """The decrypted metadata file_name matches the directory name."""
     directory = Directory.create(tmp_path, "archive", "owner")
-    loaded = File.get_file(tmp_path / ".archive", directory.metadata.encrypted_file_key)
-    assert loaded.file_name == ".archive"
+    loaded = File.get_file(
+        directory.metadata.path, directory.metadata.encrypted_file_key
+    )
+    assert loaded.file_name == "archive"
 
 
 def test_directory_metadata_permission_default(tmp_path):

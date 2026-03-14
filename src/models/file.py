@@ -32,15 +32,18 @@ class File:
         owner_name: str,
         body: str = "",
         permission: Permission = Permission.USER,
+        is_metadata: bool = False,
     ) -> "File":
         """Create the file on disk as <name> and return a File instance."""
         # TODO: make sure we aren't creating files outside of the current user's directory
         # Maybe make sure you are the owner of the parent directory?
-        path = working_dir / f"{name}"
-        if path.exists():
-            raise FileExistsError(f"{path} already exists")
+        encrypted_name = hashlib.sha256(name.encode("utf-8")).hexdigest()
+        if is_metadata:
+            encrypted_name = f".{encrypted_name}"
         file_key = AESGCM.generate_key(bit_length=256)
-        encrypted_name = hashlib.sha256(str(path).encode("utf-8")).hexdigest()
+        real_path = working_dir / encrypted_name
+        if real_path.exists():
+            raise FileExistsError(f"{real_path} already exists")
         instance = cls(
             file_name=name,
             owner_name=owner_name,
@@ -48,12 +51,12 @@ class File:
             encrypted_name=encrypted_name,
             body=body,
             encrypted_file_key=file_key,
-            path=path,
+            path=real_path,
         )
         instance.save()
         from backend.file_utils import add_file_to_user
 
-        add_file_to_user(str(path), file_key, owner_name)
+        add_file_to_user(str(real_path), file_key, owner_name)
         return instance
 
     @classmethod

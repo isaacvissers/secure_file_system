@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import backend.auth as auth
@@ -112,7 +113,7 @@ def test_create_user_creates_home_directory(tmp_path, monkeypatch):
     user_dict = auth.create_user("tester", "password", is_admin=False)
     assert user_dict is not None
 
-    user_dir = tmp_path / "tester"
+    user_dir = tmp_path / hashlib.sha256("tester".encode("utf-8")).hexdigest()
     assert user_dir.exists() and user_dir.is_dir()
 
 

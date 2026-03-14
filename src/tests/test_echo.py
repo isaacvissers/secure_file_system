@@ -1,7 +1,10 @@
+import backend.file_utils as file_utils
 import main as main_module
 from main import SecureFS
+from models.directory import Directory
 from models.file import File
 from tests.encryption_helpers import load_tracked_file, track_file
+from tests.path_helpers import encrypted_path
 from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
@@ -12,12 +15,15 @@ from tests.test_login import _make_user_data
 def _logged_in_shell(tmp_path, monkeypatch):
     """Return a SecureFS instance logged in with cwd inside FILES_DIR/alice."""
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    user_home = tmp_path / "alice"
-    user_home.mkdir(exist_ok=True)
+    monkeypatch.setattr(file_utils, "add_file_to_user", lambda *args, **kwargs: True)
+    user_home = Directory.create(tmp_path, "alice", "alice")
 
     shell = SecureFS()
     shell.current_user = _make_user_data(user_id=1, username="alice")
-    shell.current_working_directory = user_home
+    shell.current_user["file_keys"][
+        str(user_home.metadata.path)
+    ] = user_home.metadata.encrypted_file_key.hex()
+    shell.current_working_directory = user_home.path
     shell._update_prompt()
     return shell
 
@@ -43,18 +49,20 @@ def test_echo_writes_to_file_with_overwrite_redirect(tmp_path, monkeypatch):
 
     shell.do_echo("hello > notes")
 
-    file = load_tracked_file(shell, tmp_path / "alice" / "notes")
+    file = load_tracked_file(
+        shell, encrypted_path(shell.current_working_directory, "notes")
+    )
     assert file.body == "hello\n"
 
 
 def test_echo_appends_to_file_with_double_redirect(tmp_path, monkeypatch):
     """echo >> appends to existing decrypted body content."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    file_path = tmp_path / "alice" / "notes"
+    file_path = encrypted_path(shell.current_working_directory, "notes")
 
     track_file(
         shell,
-        File.create(tmp_path / "alice", "notes", "alice", body="start\n"),
+        File.create(shell.current_working_directory, "notes", "alice", body="start\n"),
     )
 
     shell.do_echo("next >> notes")
@@ -89,7 +97,9 @@ def test_echo_preserves_explicit_target_name(tmp_path, monkeypatch):
 
     shell.do_echo("hello > notes.backup")
 
-    file = load_tracked_file(shell, tmp_path / "alice" / "notes.backup")
+    file = load_tracked_file(
+        shell, encrypted_path(shell.current_working_directory, "notes.backup")
+    )
     assert file.body == "hello\n"
 
 
@@ -121,5 +131,7 @@ def test_echo_redirect_with_no_content_writes_newline(tmp_path, monkeypatch):
 
     shell.do_echo("> empty")
 
-    file = load_tracked_file(shell, tmp_path / "alice" / "empty")
+    file = load_tracked_file(
+        shell, encrypted_path(shell.current_working_directory, "empty")
+    )
     assert file.body == "\n"
