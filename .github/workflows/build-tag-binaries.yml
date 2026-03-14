@@ -16,8 +16,8 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux-x86_64
-          - os: macos-13
-            platform: macos-x86_64
+          - os: macos-latest
+            platform: macos
           - os: windows-latest
             platform: windows-x86_64
 
@@ -39,19 +39,11 @@ jobs:
 
       - name: Build main executable
         run: |
-          pyinstaller \
-            --onefile \
-            --name secure-fs \
-            --paths src \
-            src/main.py
+          pyinstaller --onefile --name secure-fs --paths src src/main.py
 
       - name: Build admin setup executable
         run: |
-          pyinstaller \
-            --onefile \
-            --name secure-fs-admin-setup \
-            --paths src \
-            src/scripts/create_admin.py
+          pyinstaller --onefile --name secure-fs-admin-setup --paths src src/scripts/create_admin.py
 
       - name: Package release binaries (Linux/macOS)
         if: runner.os != 'Windows'
