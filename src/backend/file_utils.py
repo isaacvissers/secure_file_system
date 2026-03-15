@@ -7,7 +7,7 @@ from typing import Any
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from backend.auth import _get_admin_or_fail, load_user, save_user
+from backend.auth import _get_admin_or_fail, get_admin_record, load_user, save_user
 from backend.group_utils import get_user_groups_by_username, load_group, save_group
 from models.file import File
 
@@ -221,7 +221,9 @@ def sync_file_info_for_user(
     file_key: Any = None,
 ) -> bool:
     """Refresh a single `file_info` entry from on-disk encrypted content."""
-    admin = _get_admin_or_fail()
+    # Silent lookup: File.save may call this in test fixtures that intentionally
+    # don't create an admin record, and this should not print to stdout.
+    admin = get_admin_record()
     if not admin:
         return False
 
