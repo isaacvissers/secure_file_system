@@ -218,7 +218,7 @@ def add_user_key_to_admin(
 
 
 def save_user(user_key: str, user_dict: UserDict, record_key: bytes) -> None:
-    """Save user record to disk (serialization hook supports future encryption)."""
+    """Save user record to disk."""
     path = _user_file_path(user_key)
     payload = encrypt_with_key(json.dumps(user_dict).encode("utf-8"), record_key)
     path.write_bytes(payload)
@@ -279,7 +279,7 @@ def create_user(
     user_dict: UserDict = {
         "username": username,
         "file_keys": {},
-        "group_keys": [],
+        "group_keys": {},
     }
 
     if is_admin:
@@ -299,10 +299,16 @@ def create_user(
     )
 
     if not is_admin:
-        create_user_directory(user_dict["username"])
-
+        user_directory = create_user_directory(user_dict["username"])
         if load_group("all", admin=admin) is None:
             create_group("all", admin=admin)
+
+        from backend.file_utils import add_file_to_group
+
+        if user_directory is not None:
+            metadata = getattr(user_directory, "metadata", None)
+            file_key = getattr(metadata, "encrypted_file_key", user_directory)
+            add_file_to_group("all", file_key, admin=admin)
 
         added_to_group = add_user_to_group("all", username, admin=admin)
         if not added_to_group:

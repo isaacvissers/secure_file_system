@@ -23,7 +23,7 @@ def test_save_and_load_user_without_admin_index(tmp_path, monkeypatch):
         }
     )
 
-    user = {"username": "bob", "file_keys": [], "group_keys": []}
+    user = {"username": "bob", "file_keys": [], "group_keys": {}}
     key = os.urandom(16).hex()
     record_key = os.urandom(32)
     auth.save_user(key, user, record_key=record_key)
@@ -48,9 +48,6 @@ def test_create_user_writes_file_and_updates_admin_index(tmp_path, monkeypatch):
     monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
     monkeypatch.setattr(
         auth, "_user_file_path", lambda user_key: users_dir / f"{user_key}.json"
-    )
-    monkeypatch.setattr(
-        group_utils, "_group_file", lambda group_key: groups_dir / f"{group_key}.json"
     )
 
     # create an admin record first so create_user will add mapping
@@ -104,7 +101,7 @@ def test_user_exists_and_get_admin_record(tmp_path, monkeypatch):
     user_record_key = os.urandom(32)
     auth.save_user(
         user_key,
-        {"username": "dana", "file_keys": [], "group_keys": []},
+        {"username": "dana", "file_keys": [], "group_keys": {}},
         record_key=user_record_key,
     )
     auth.add_user_key_to_admin("dana", user_key, user_record_key.hex())
@@ -135,7 +132,7 @@ def test_resolve_user_with_admin_index(tmp_path, monkeypatch):
     record_key = os.urandom(32)
     auth.save_user(
         key,
-        {"username": "erin", "file_keys": [], "group_keys": []},
+        {"username": "erin", "file_keys": [], "group_keys": {}},
         record_key=record_key,
     )
     auth.add_user_key_to_admin("erin", key, record_key.hex())
@@ -190,9 +187,6 @@ def test_new_user_added_to_all_group(tmp_path, monkeypatch):
         auth, "_user_file_path", lambda user_key: users_dir / f"{user_key}.json"
     )
     monkeypatch.setattr(
-        group_utils, "_group_file", lambda group_key: groups_dir / f"{group_key}.json"
-    )
-    monkeypatch.setattr(
         auth, "create_user_directory", lambda username: files_dir / username
     )
 
@@ -216,8 +210,12 @@ def test_new_user_added_to_all_group(tmp_path, monkeypatch):
     # Verify user's group_keys includes the "all" group
     user_loaded = auth.load_user("testuser")
     admin_reloaded = auth.get_admin_record()
-    all_group_key = admin_reloaded.group_keys["all"]
-    assert all_group_key in user_loaded["group_keys"]
+    all_group_path, _ = group_utils.get_group_access(admin_reloaded, "all")
+    all_entry = user_loaded["group_keys"].get("all")
+    assert isinstance(all_entry, dict)
+    assert all_entry.get("file_path") == all_group_path
+    assert isinstance(all_entry.get("encryption_key"), str)
+    assert len(all_entry.get("encryption_key")) == 64
 
 
 def test_admin_user_not_added_to_all_group(tmp_path, monkeypatch):
@@ -236,9 +234,6 @@ def test_admin_user_not_added_to_all_group(tmp_path, monkeypatch):
     monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
     monkeypatch.setattr(
         auth, "_user_file_path", lambda user_key: users_dir / f"{user_key}.json"
-    )
-    monkeypatch.setattr(
-        group_utils, "_group_file", lambda group_key: groups_dir / f"{group_key}.json"
     )
 
     # Create admin first
@@ -281,9 +276,6 @@ def test_multiple_users_added_to_all_group(tmp_path, monkeypatch):
         auth, "_user_file_path", lambda user_key: users_dir / f"{user_key}.json"
     )
     monkeypatch.setattr(
-        group_utils, "_group_file", lambda group_key: groups_dir / f"{group_key}.json"
-    )
-    monkeypatch.setattr(
         auth, "create_user_directory", lambda username: files_dir / username
     )
 
@@ -319,9 +311,6 @@ def test_create_user_creates_missing_all_group(tmp_path, monkeypatch):
     monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
     monkeypatch.setattr(
         auth, "_user_file_path", lambda user_key: users_dir / f"{user_key}.json"
-    )
-    monkeypatch.setattr(
-        group_utils, "_group_file", lambda group_key: groups_dir / f"{group_key}.json"
     )
     monkeypatch.setattr(
         auth, "create_user_directory", lambda username: files_dir / username

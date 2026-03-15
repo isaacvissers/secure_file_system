@@ -29,11 +29,6 @@ def temp_storage(monkeypatch):
         monkeypatch.setattr(
             auth, "_user_file_path", lambda user_key: users_dir / f"{user_key}.json"
         )
-        monkeypatch.setattr(
-            group_utils,
-            "_group_file",
-            lambda group_key: groups_dir / f"{group_key}.json",
-        )
 
         # Patch create_user_directory to just create a temp folder or do nothing
         monkeypatch.setattr(
@@ -84,24 +79,23 @@ def test_create_group(temp_storage, admin_user):
     # Group key registered in admin
     admin = auth.get_admin_record()
     assert "devs" in admin.group_keys
-    group_key = admin.group_keys["devs"]
+    group_path, _ = group_utils.get_group_access(admin, "devs")
 
     # Group file exists
-    group_file = group_utils.GROUPS_DIR / f"{group_key}.json"
-    assert group_file.exists()
+    assert Path(group_path).exists()
 
 
 def test_load_and_save_group(temp_storage, admin_user):
     group_utils.create_group("qa")
     admin = auth.get_admin_record()
-    group_key = admin.group_keys["qa"]
+    group_path, group_record_key = group_utils.get_group_access(admin, "qa")
 
     group = group_utils.load_group("qa")
     assert group["group_name"] == "qa"
 
     # Modify and save
     group["file_access"].append("file_1")
-    group_utils.save_group(group_key, group)
+    group_utils.save_group(group_path, group, record_key=group_record_key)
 
     loaded = group_utils.load_group("qa")
     assert "file_1" in loaded["file_access"]
@@ -110,7 +104,7 @@ def test_load_and_save_group(temp_storage, admin_user):
 def test_add_user_to_group(temp_storage, admin_user, all_group, normal_user):
     group_utils.create_group("design")
     admin = auth.get_admin_record()
-    group_key = admin.group_keys["design"]
+    group_path, _ = group_utils.get_group_access(admin, "design")
 
     result = group_utils.add_user_to_group("design", "alice")
     assert result is True
@@ -123,7 +117,11 @@ def test_add_user_to_group(temp_storage, admin_user, all_group, normal_user):
 
     # Check user updated
     user = auth.load_user("alice")
-    assert group_key in user["group_keys"]
+    design_entry = user["group_keys"].get("design")
+    assert isinstance(design_entry, dict)
+    assert design_entry.get("file_path") == group_path
+    assert isinstance(design_entry.get("encryption_key"), str)
+    assert len(design_entry.get("encryption_key")) == 64
 
     # Adding the same user again fails
     result2 = group_utils.add_user_to_group("design", "alice")
@@ -158,5 +156,27 @@ def test_new_user_automatically_added_to_all_group(temp_storage, admin_user, all
 
     # Verify user's group_keys includes the "all" group
     bob_user = auth.load_user("bob")
-    all_group_key = admin.group_keys["all"]
-    assert all_group_key in bob_user["group_keys"]
+    all_group_path, _ = group_utils.get_group_access(admin, "all")
+    all_entry = bob_user["group_keys"].get("all")
+    assert isinstance(all_entry, dict)
+    assert all_entry.get("file_path") == all_group_path
+    assert isinstance(all_entry.get("encryption_key"), str)
+    assert len(all_entry.get("encryption_key")) == 64
+
+
+def test_user_group_metadata_helpers():
+    user = {
+        "username": "alice",
+        "group_keys": {
+            "design": {
+                "file_path": "/tmp/abc123.json",
+                "encryption_key": "f" * 64,
+            }
+        },
+    }
+
+    storage_key, record_key = group_utils.get_user_group_access(user, "design")
+    assert storage_key == "/tmp/abc123.json"
+
+    assert isinstance(record_key, bytes)
+    assert len(record_key) == 32

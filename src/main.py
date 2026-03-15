@@ -4,6 +4,7 @@ import json
 import shlex
 
 import backend.auth as auth
+from backend import group_utils
 from backend.auth import *
 from backend.auth import FILES_DIR
 from backend.cryptography_utils import *
@@ -181,13 +182,15 @@ class SecureFS(cmd.Cmd):
             return
 
         try:
-            Directory.create(
+            dir = Directory.create(
                 self.current_working_directory,
                 directory_name,
                 self.current_user["username"],
             )
             self._refresh_current_user()
-
+            add_file_to_group(
+                "all", dir.metadata.encrypted_file_key, admin=self.admin_cache
+            )
             print(f"Directory '{directory_name}' created.")
         except FileExistsError as e:
             print(f"Error: {e}")
@@ -216,6 +219,7 @@ class SecureFS(cmd.Cmd):
             file = File.create(
                 self.current_working_directory, file_name, self.current_user["username"]
             )
+            add_file_to_group("all", file.encrypted_file_key, admin=self.admin_cache)
             self._refresh_current_user({str(file.path): file.encrypted_file_key.hex()})
             print(f"File '{file_name}' created.")
         except FileExistsError as e:
@@ -422,6 +426,9 @@ class SecureFS(cmd.Cmd):
                     self.current_user["username"],
                     body=output,
                 )
+                add_file_to_group(
+                    "all", file.encrypted_file_key, admin=self.admin_cache
+                )
                 self._refresh_current_user(
                     {str(file.path): file.encrypted_file_key.hex()}
                 )
@@ -608,7 +615,6 @@ class SecureFS(cmd.Cmd):
         if created_user is None:
             print("Error: Username already exists.")
             return
-
         self._load_admin_cache(force_refresh=True)
         print(f"User created: {username} ")
 

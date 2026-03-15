@@ -50,7 +50,7 @@ def _make_user_data(user_id: int = 1, username: str = "alice"):
         "user_id": user_id,
         "username": username,
         "file_keys": {},
-        "group_keys": [],
+        "group_keys": {},
     }
 
 

@@ -1,14 +1,14 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 
 @dataclass
 class User:
     username: str
     file_keys: Dict[str, str] = field(default_factory=dict)
-    group_keys: List[str] = field(
-        default_factory=list
-    )  # TODO this needs to be a dict also
+    group_keys: Dict[str, Dict[str, str]] = field(
+        default_factory=dict
+    )  # Maps group names to dicts with 'file_path' and 'encryption_key'
     auth_salt: Optional[str] = (
         None  # Random 16 byte salt used for password verification
     )
@@ -17,9 +17,9 @@ class User:
 
 @dataclass
 class AdminUser(User):
-    user_keys: Dict[str, str] = field(
+    user_keys: Dict[str, Dict[str, str]] = field(
         default_factory=dict
-    )  # Maps encrypted usernames to keys
-    group_keys: Dict[str, str] = field(
+    )  # Maps usernames to encrypted user metadata
+    group_keys: Dict[str, Dict[str, str]] = field(
         default_factory=dict
-    )  # Maps encrypted group names to keys
+    )  # Maps group names to encrypted group metadata

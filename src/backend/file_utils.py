@@ -7,7 +7,12 @@ from backend.auth import (
     load_user,
     save_user,
 )
-from backend.group_utils import get_user_groups_by_username, load_group, save_group
+from backend.group_utils import (
+    get_group_access,
+    get_user_groups_by_username,
+    load_group,
+    save_group,
+)
 
 FILE_INDEX = "encrypted_name"
 
@@ -126,9 +131,8 @@ def add_file_to_group(group_name: str, file_key: Any, admin=None) -> bool:
     if not admin:
         return None
 
-    group_key = admin.group_keys.get(group_name)
-
-    if not group_key:
+    group_path, group_record_key = get_group_access(admin, group_name)
+    if not group_path or not group_record_key:
         print(f"Group '{group_name}' not found.")
         return False
 
@@ -141,7 +145,7 @@ def add_file_to_group(group_name: str, file_key: Any, admin=None) -> bool:
     group.setdefault("file_access", [])
     if fk not in group["file_access"]:
         group["file_access"].append(fk)
-        save_group(group_key, group)
+        save_group(group_path, group, record_key=group_record_key)
 
     return True
 
