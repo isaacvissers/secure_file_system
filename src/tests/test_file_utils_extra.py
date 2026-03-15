@@ -283,8 +283,8 @@ def test_check_user_file_integrities_salvages_name_from_partial_plaintext(
 ):
     """Even if JSON parse fails, scan plaintext for file_name and use it for warning display."""
     import backend.auth as auth
-    import backend.group_utils as group_utils
     import backend.file_utils as file_utils
+    import backend.group_utils as group_utils
     from backend.file_utils import check_user_file_integrities
     from models.file import File
 

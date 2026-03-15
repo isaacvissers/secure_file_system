@@ -1,5 +1,5 @@
-import main as main_module
 import backend.auth as auth
+import main as main_module
 from main import SecureFS
 from models.directory import Directory
 from models.file import File
