@@ -416,6 +416,8 @@ class SecureFS(cmd.Cmd):
                 )
                 file.body = file.body + output if append_mode else output
                 file.save()
+                sync_file_info_for_user(self.current_user["username"], file_path)
+                self._refresh_current_user()
 
         except Exception as e:
             print(f"Error writing to file: {e}")
@@ -450,6 +452,7 @@ class SecureFS(cmd.Cmd):
         file_key = bytes.fromhex(self.current_user["file_keys"].get(str(source_path)))
         file = File.get_file(source_path, file_key)
         file.rename_file(dest_name)
+        remove_file_tracking_for_user(self.current_user["username"], source_path)
         self._refresh_current_user()
 
     @requires_login

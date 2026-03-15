@@ -1,4 +1,5 @@
 import main as main_module
+import backend.auth as auth
 from main import SecureFS
 from models.directory import Directory
 from models.file import File
@@ -122,3 +123,62 @@ def test_mv_invalid_syntax_does_not_change_existing_files(
     assert "Invalid syntax" in captured.out
     after = sorted(p.name for p in shell.current_working_directory.iterdir())
     assert after == original
+
+
+def test_mv_updates_persisted_file_info_for_renamed_file(tmp_path, monkeypatch):
+    """do_mv should remove old-path file_info and add a new-path entry for renamed files."""
+    users_dir = tmp_path / "users"
+    files_dir = tmp_path / "files"
+    users_dir.mkdir()
+    files_dir.mkdir()
+
+    monkeypatch.setattr(auth, "USERS_DIR", users_dir)
+    monkeypatch.setattr(auth, "FILES_DIR", files_dir)
+    monkeypatch.setattr(main_module, "FILES_DIR", files_dir)
+
+    admin_key = auth.get_admin_key()
+    auth.save_user(
+        admin_key,
+        {
+            "username": "admin",
+            "file_keys": [],
+            "user_keys": {"alice": "alice_key"},
+            "group_keys": {},
+        },
+    )
+    auth.save_user(
+        "alice_key",
+        {
+            "username": "alice",
+            "file_keys": {},
+            "file_info": {},
+            "group_keys": [],
+        },
+    )
+
+    user_home = Directory.create(files_dir, "alice", "alice")
+
+    shell = SecureFS()
+    shell.current_user = auth.load_user("alice")
+    shell.current_working_directory = user_home.path
+    shell._update_prompt()
+
+    File.create(shell.current_working_directory, "old", "alice")
+    shell._refresh_current_user()
+
+    old_path = encrypted_path(shell.current_working_directory, "old")
+    new_path = encrypted_path(shell.current_working_directory, "new")
+
+    assert str(old_path) in shell.current_user.get("file_info", {})
+
+    shell.do_mv("old new")
+
+    updated_user = auth.load_user("alice")
+    assert updated_user is not None
+    assert str(old_path) not in updated_user.get("file_info", {})
+    assert str(old_path) not in updated_user.get("file_keys", {})
+
+    new_entry = updated_user.get("file_info", {}).get(str(new_path))
+    assert new_entry is not None
+    assert new_entry[0] == "new"
+    assert len(new_entry[1]) == 64

@@ -88,7 +88,10 @@ def _infer_file_name(file_name_or_key: Any) -> str:
 def add_file_to_user(
     file_name: Any, file_key: Any = None, username: str = None
 ) -> bool:
-    """Normalize `file_key` and add it to the user's `file_keys` list."""
+    """
+    Normalize `file_key` and add it to the user's `file_keys` list.
+    Also add additional file information to user file.
+    """
     if username is None:
         username = file_key
         file_key = file_name
@@ -96,7 +99,7 @@ def add_file_to_user(
 
     admin = _get_admin_or_fail()
     if not admin:
-        return None
+        return False
 
     user_key = getattr(admin, "user_keys", {}).get(username)
     if not user_key:
@@ -109,8 +112,38 @@ def add_file_to_user(
     if not isinstance(user.get("file_keys"), dict):
         user["file_keys"] = {}
 
+    if not isinstance(user.get("file_info"), dict):
+        user["file_info"] = {}
+
+    # add file_key
     fk = _normalize_file_key(file_key)
     user["file_keys"][file_name] = fk
+    
+    # add file_info
+    # `file_key` may be raw bytes (e.g., File.create path), so resolve path
+    # from either `file_name` or object attributes.
+    tracked_path = getattr(file_key, "path", None)
+    if tracked_path is None and isinstance(file_name, str):
+        tracked_path = Path(file_name)
+
+    if tracked_path is None:
+        metadata = getattr(file_key, "metadata", None)
+        tracked_path = getattr(metadata, "path", None)
+
+    if isinstance(tracked_path, str):
+        tracked_path = Path(tracked_path)
+
+    file = None
+    if isinstance(tracked_path, Path):
+        file = try_decrypt_file(tracked_path, fk)
+        if file is None:
+            file = try_decrypt_directory(tracked_path, fk)
+
+    if file and file.path.exists():
+        hashes = _read_integrity_hashes(file.path)
+        if hashes:
+            user["file_info"][file_name] = (file.file_name, hashes[1])
+
     save_user(user_key, user)
 
     return True
@@ -156,24 +189,105 @@ def add_file_to_user_and_groups(file_key: Any, username: str) -> bool:
 
     return True
 
-def _has_valid_encrypted_integrity(path: Path) -> bool:
-    """Return True when the on-disk integrity hash matches encrypted payload bytes."""
+
+def _read_integrity_hashes(path: Path) -> tuple[str, str] | None:
+    """Return (computed_hash, stored_hash) for the file, or None if unreadable/malformed.
+
+    Both values are lowercase SHA-256 hex strings. A valid file satisfies
+    computed_hash == stored_hash. Callers may also compare stored_hash against
+    a known-good baseline to detect silent content replacement.
+    """
+    if not path.exists():
+        return None
+
     content = path.read_bytes()
     if len(content) < 64:
-        return False
+        return None
 
-    payload = content[:-64]
     try:
-        stored_hash = content[-64:].decode("utf-8")
+        stored = content[-64:].decode("utf-8")
     except UnicodeDecodeError:
+        return None
+
+    if len(stored) != 64:
+        return None
+
+    return hashlib.sha256(content[:-64]).hexdigest(), stored
+
+
+def sync_file_info_for_user(
+    username: str,
+    tracked_path: str | Path,
+    file_key: Any = None,
+) -> bool:
+    """Refresh a single `file_info` entry from on-disk encrypted content."""
+    admin = _get_admin_or_fail()
+    if not admin:
         return False
 
-    if len(stored_hash) != 64:
+    user_key = getattr(admin, "user_keys", {}).get(username)
+    if not user_key:
         return False
 
-    computed_hash = hashlib.sha256(payload).hexdigest()
-    return stored_hash == computed_hash
+    user = load_user(username)
+    if not user:
+        return False
 
+    if not isinstance(user.get("file_info"), dict):
+        user["file_info"] = {}
+
+    path_obj = tracked_path if isinstance(tracked_path, Path) else Path(tracked_path)
+    path_key = str(path_obj)
+
+    file_key_hex = _normalize_file_key(file_key) if file_key is not None else None
+    if not file_key_hex:
+        file_key_hex = (user.get("file_keys") or {}).get(path_key)
+    if not file_key_hex:
+        return False
+
+    file = try_decrypt_file(path_obj, file_key_hex)
+    if file is None:
+        file = try_decrypt_directory(path_obj, file_key_hex)
+    if file is None:
+        return False
+
+    hashes = _read_integrity_hashes(path_obj)
+    if hashes is None:
+        return False
+
+    user["file_info"][path_key] = (file.file_name, hashes[1])
+    save_user(user_key, user)
+    return True
+
+
+def remove_file_tracking_for_user(username: str, tracked_path: str | Path) -> bool:
+    """Remove stale file tracking for a path from both `file_keys` and `file_info`."""
+    admin = _get_admin_or_fail()
+    if not admin:
+        return False
+
+    user_key = getattr(admin, "user_keys", {}).get(username)
+    if not user_key:
+        return False
+
+    user = load_user(username)
+    if not user:
+        return False
+
+    path_key = str(tracked_path if isinstance(tracked_path, Path) else Path(tracked_path))
+
+    changed = False
+    if isinstance(user.get("file_keys"), dict) and path_key in user["file_keys"]:
+        user["file_keys"].pop(path_key, None)
+        changed = True
+
+    if isinstance(user.get("file_info"), dict) and path_key in user["file_info"]:
+        user["file_info"].pop(path_key, None)
+        changed = True
+
+    if changed:
+        save_user(user_key, user)
+    return changed
 
 def _decrypted_display_for_path(path: Path, file_key_hex: str | None) -> str | None:
     """Return decrypted logical name for a tracked path when possible."""
@@ -270,6 +384,7 @@ def _build_compromised_display_path(
     user_home: Path,
     username: str,
     file_keys: dict[str, str],
+    file_info: dict | None = None,
 ) -> str:
     """Render `username/...` with decrypted names where available, else encrypted path segments."""
     try:
@@ -290,16 +405,25 @@ def _build_compromised_display_path(
 
         if not is_last:
             metadata_path = current_dir / f".{part}"
-            metadata_key_hex = file_keys.get(str(metadata_path))
-            decrypted_name = _decrypted_display_for_path(metadata_path, metadata_key_hex)
-            displayed_parts.append(decrypted_name or part)
+            # Prefer file_info: works even when the metadata file is unreadable/corrupted.
+            info = (file_info or {}).get(str(metadata_path))
+            if info:
+                displayed_parts.append(info[0])
+            else:
+                metadata_key_hex = file_keys.get(str(metadata_path))
+                decrypted_name = _decrypted_display_for_path(metadata_path, metadata_key_hex)
+                displayed_parts.append(decrypted_name or part)
             current_dir = part_path
             continue
 
-        # Last component can be a file, or a directory metadata file.
-        file_key_hex = file_keys.get(str(path))
-        decrypted_leaf = _decrypted_display_for_path(path, file_key_hex)
-        displayed_parts.append(decrypted_leaf or part)
+        # Last component: prefer file_info for the display name.
+        info = (file_info or {}).get(str(path))
+        if info:
+            displayed_parts.append(info[0])
+        else:
+            file_key_hex = file_keys.get(str(path))
+            decrypted_leaf = _decrypted_display_for_path(path, file_key_hex)
+            displayed_parts.append(decrypted_leaf or part)
 
     return f"{username}/" + "/".join(displayed_parts)
 
@@ -308,8 +432,11 @@ def check_user_file_integrities(current_user: dict, user_home: Path) -> list[str
     """Return compromised owned paths as username-prefixed, display-ready strings."""
     username = current_user.get("username", "user")
     file_keys = current_user.get("file_keys", {}) or {}
+    file_info = current_user.get("file_info", {}) or {}
     if not isinstance(file_keys, dict):
         return []
+    if not isinstance(file_info, dict):
+        file_info = {}
 
     compromised_paths: set[Path] = set()
 
@@ -322,15 +449,24 @@ def check_user_file_integrities(current_user: dict, user_home: Path) -> list[str
             compromised_paths.add(tracked_path)
             continue
 
-        if not _has_valid_encrypted_integrity(tracked_path):
+        hashes = _read_integrity_hashes(tracked_path)
+        if hashes is None or hashes[0] != hashes[1]:
+            # Unreadable, too short, or internally inconsistent.
             compromised_paths.add(tracked_path)
             continue
 
-        if _decrypted_display_for_path(tracked_path, file_key_hex) is None:
-            compromised_paths.add(tracked_path)
+        info = file_info.get(path_str)
+        if info:
+            # Baseline comparison: catches silent re-encryption with different content.
+            if hashes[1] != info[1]:
+                compromised_paths.add(tracked_path)
+        else:
+            # No baseline yet: fall back to verifying the file decrypts.
+            if _decrypted_display_for_path(tracked_path, file_key_hex) is None:
+                compromised_paths.add(tracked_path)
 
     display_paths = [
-        _build_compromised_display_path(path, user_home, username, file_keys)
+        _build_compromised_display_path(path, user_home, username, file_keys, file_info)
         for path in compromised_paths
     ]
     return sorted(set(display_paths))
