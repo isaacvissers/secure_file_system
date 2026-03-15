@@ -22,6 +22,28 @@ class SecureFS(cmd.Cmd):
         self.current_working_directory = None
         self._update_prompt()
 
+    def _resolve_directory_display_name(
+        self,
+        parent_dir,
+        encrypted_dir_name: str,
+        show_decrypt_error: bool = False,
+    ) -> str:
+        """Return a decrypted directory name when metadata can be read, else fallback."""
+        metadata_path = parent_dir / f".{encrypted_dir_name}"
+        if not metadata_path.exists() or not self.current_user:
+            return encrypted_dir_name
+
+        file_key_hex = self.current_user.get("file_keys", {}).get(str(metadata_path))
+        decrypted_dir = try_decrypt_directory(metadata_path, file_key_hex)
+        if decrypted_dir:
+            return decrypted_dir.file_name.lstrip(".")
+
+        if show_decrypt_error:
+            print(
+                f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
+            )
+        return encrypted_dir_name
+
     def _build_displayed_path(self):
         """Return cwd path under FILES_DIR with decrypted names when available."""
         if not (
@@ -35,23 +57,8 @@ class SecureFS(cmd.Cmd):
         displayed_path = ""
 
         for part in relative_path.parts:
-            metadata_path = base_dir / f".{part}"
-            if metadata_path.exists():
-                try:
-                    file_key_hex = self.current_user["file_keys"].get(
-                        str(metadata_path)
-                    )
-                    if file_key_hex:
-                        file_key = bytes.fromhex(file_key_hex)
-                        metadata_file = File.get_file(metadata_path, file_key)
-                        decrypted_name = metadata_file.file_name.lstrip(".")
-                        displayed_path += f"/{decrypted_name}"
-                    else:
-                        displayed_path += f"/{part}"
-                except Exception:
-                    displayed_path += f"/{part}"
-            else:
-                displayed_path += f"/{part}"
+            displayed_part = self._resolve_directory_display_name(base_dir, part)
+            displayed_path += f"/{displayed_part}"
 
             base_dir = base_dir / part
 
@@ -277,17 +284,12 @@ class SecureFS(cmd.Cmd):
             if entry.is_dir():
                 metadata_path = self.current_working_directory / f".{entry.name}"
                 if metadata_path.exists():
-                    decrypted_dir = try_decrypt_directory(
-                        metadata_path,
-                        self.current_user["file_keys"].get(str(metadata_path)),
+                    display_name = self._resolve_directory_display_name(
+                        self.current_working_directory,
+                        entry.name,
+                        show_decrypt_error=True,
                     )
-                    if decrypted_dir:
-                        print(f"{decrypted_dir.file_name.lstrip('.')}/")
-                    else:
-                        print(
-                            f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
-                        )
-                        print(f"{entry.name}/")
+                    print(f"{display_name}/")
             elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
                 continue
             else:
@@ -417,7 +419,6 @@ class SecureFS(cmd.Cmd):
                 )
                 file.body = file.body + output if append_mode else output
                 file.save()
-                sync_file_info_for_user(self.current_user["username"], file_path)
                 self._refresh_current_user()
 
         except Exception as e:

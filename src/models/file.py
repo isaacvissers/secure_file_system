@@ -122,6 +122,11 @@ class File:
         integrity_hash = hashlib.sha256(nonce + encrypted_blob).hexdigest()
         self.path.write_bytes((nonce + encrypted_blob) + integrity_hash.encode("utf-8"))
 
+        # Keep user file_info in sync whenever file bytes are rewritten.
+        from backend.file_utils import sync_file_info_for_user # must be here to avoid circular imports
+
+        sync_file_info_for_user(self.owner_name, self.path, self.encrypted_file_key)
+
     def check_integrity(self) -> bool:
         """Check the integrity of the file by comparing the stored hash with a hash of the current content."""
         content = self.path.read_bytes()

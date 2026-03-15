@@ -349,8 +349,7 @@ def test_check_user_file_integrities_salvages_name_from_partial_plaintext(
 def test_check_user_file_integrities_detects_baseline_hash_mismatch(
     tmp_path, monkeypatch
 ):
-    """A file re-saved with different content has a valid internal hash but a different baseline;
-    check_user_file_integrities should detect this via the file_info comparison."""
+    """Saving through File.save should refresh the tracked baseline hash automatically."""
     import backend.auth as auth
     import backend.group_utils as group_utils
     from backend.file_utils import check_user_file_integrities
@@ -381,16 +380,24 @@ def test_check_user_file_integrities_detects_baseline_hash_mismatch(
     home = files_dir / hashlib.sha256("alice".encode("utf-8")).hexdigest()
     file1 = File.create(home, "secret.txt", "alice", body="original")
 
-    # Re-save the file with tampered content: the new on-disk hash is internally
-    # valid, but it no longer matches the baseline stored in file_info.
+    user_before = auth.load_user("alice")
+    assert user_before is not None
+    old_entry = user_before.get("file_info", {}).get(str(file1.path))
+    assert old_entry is not None
+    old_hash = old_entry[1]
+
+    # Re-save with different content. File.save now updates file_info baseline.
     file1.body = "tampered"
     file1.save()
 
     user = auth.load_user("alice")
     assert user is not None
-    compromised = check_user_file_integrities(user, home)
+    new_entry = user.get("file_info", {}).get(str(file1.path))
+    assert new_entry is not None
+    assert new_entry[1] != old_hash
 
-    assert "alice/secret.txt" in compromised
+    compromised = check_user_file_integrities(user, home)
+    assert "alice/secret.txt" not in compromised
 
 
 def test_sync_file_info_for_user_updates_hash_after_file_edit(tmp_path, monkeypatch):
