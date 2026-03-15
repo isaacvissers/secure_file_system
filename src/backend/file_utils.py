@@ -118,7 +118,7 @@ def add_file_to_user(
     # add file_key
     fk = _normalize_file_key(file_key)
     user["file_keys"][file_name] = fk
-    
+
     # add file_info
     # `file_key` may be raw bytes (e.g., File.create path), so resolve path
     # from either `file_name` or object attributes.
@@ -274,7 +274,9 @@ def remove_file_tracking_for_user(username: str, tracked_path: str | Path) -> bo
     if not user:
         return False
 
-    path_key = str(tracked_path if isinstance(tracked_path, Path) else Path(tracked_path))
+    path_key = str(
+        tracked_path if isinstance(tracked_path, Path) else Path(tracked_path)
+    )
 
     changed = False
     if isinstance(user.get("file_keys"), dict) and path_key in user["file_keys"]:
@@ -288,6 +290,7 @@ def remove_file_tracking_for_user(username: str, tracked_path: str | Path) -> bo
     if changed:
         save_user(user_key, user)
     return changed
+
 
 def _decrypted_display_for_path(path: Path, file_key_hex: str | None) -> str | None:
     """Return decrypted logical name for a tracked path when possible."""
@@ -361,7 +364,9 @@ def _recover_file_name_unverified(path: Path, file_key_hex: str | None) -> str |
         except Exception:
             # Fallback path: if JSON is partially corrupted, salvage only the
             # file_name field for display by scanning decoded plaintext.
-            match = re.search(r'"file_name"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', tentative_text)
+            match = re.search(
+                r'"file_name"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', tentative_text
+            )
             if match:
                 raw = match.group(1)
                 try:
@@ -411,7 +416,9 @@ def _build_compromised_display_path(
                 displayed_parts.append(info[0])
             else:
                 metadata_key_hex = file_keys.get(str(metadata_path))
-                decrypted_name = _decrypted_display_for_path(metadata_path, metadata_key_hex)
+                decrypted_name = _decrypted_display_for_path(
+                    metadata_path, metadata_key_hex
+                )
                 displayed_parts.append(decrypted_name or part)
             current_dir = part_path
             continue
@@ -471,6 +478,7 @@ def check_user_file_integrities(current_user: dict, user_home: Path) -> list[str
     ]
     return sorted(set(display_paths))
 
+
 def try_decrypt_file(entry: Path, file_key_hex: str | None) -> File | None:
     if file_key_hex:
         try:
@@ -481,6 +489,7 @@ def try_decrypt_file(entry: Path, file_key_hex: str | None) -> File | None:
             return None
 
     return None
+
 
 def try_decrypt_directory(metadata_path: Path, file_key_hex: str | None) -> File | None:
     if file_key_hex:

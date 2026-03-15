@@ -346,7 +346,9 @@ def test_check_user_file_integrities_salvages_name_from_partial_plaintext(
     assert "alice/test.txt" in compromised
 
 
-def test_check_user_file_integrities_detects_baseline_hash_mismatch(tmp_path, monkeypatch):
+def test_check_user_file_integrities_detects_baseline_hash_mismatch(
+    tmp_path, monkeypatch
+):
     """A file re-saved with different content has a valid internal hash but a different baseline;
     check_user_file_integrities should detect this via the file_info comparison."""
     import backend.auth as auth
@@ -365,9 +367,15 @@ def test_check_user_file_integrities_detects_baseline_hash_mismatch(tmp_path, mo
     monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
 
     admin_key = auth.get_admin_key()
-    auth.save_user(admin_key, {
-        "username": "admin", "file_keys": [], "user_keys": {}, "group_keys": {},
-    })
+    auth.save_user(
+        admin_key,
+        {
+            "username": "admin",
+            "file_keys": [],
+            "user_keys": {},
+            "group_keys": {},
+        },
+    )
     assert auth.create_user("alice", "pw", is_admin=False) is not None
 
     home = files_dir / hashlib.sha256("alice".encode("utf-8")).hexdigest()

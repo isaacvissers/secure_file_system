@@ -277,7 +277,10 @@ class SecureFS(cmd.Cmd):
             if entry.is_dir():
                 metadata_path = self.current_working_directory / f".{entry.name}"
                 if metadata_path.exists():
-                    decrypted_dir = try_decrypt_directory(metadata_path, self.current_user["file_keys"].get(str(metadata_path)))
+                    decrypted_dir = try_decrypt_directory(
+                        metadata_path,
+                        self.current_user["file_keys"].get(str(metadata_path)),
+                    )
                     if decrypted_dir:
                         print(f"{decrypted_dir.file_name.lstrip('.')}/")
                     else:
@@ -293,9 +296,7 @@ class SecureFS(cmd.Cmd):
                 if decrypted_file:
                     print(decrypted_file.file_name)
                 else:
-                    print(
-                        f"Error decrypting file {entry}, displaying encrypted name."
-                    )
+                    print(f"Error decrypting file {entry}, displaying encrypted name.")
                     print(entry.name)
 
     @requires_login
