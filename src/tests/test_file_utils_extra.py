@@ -349,7 +349,7 @@ def test_check_user_file_integrities_salvages_name_from_partial_plaintext(
 def test_check_user_file_integrities_detects_baseline_hash_mismatch(
     tmp_path, monkeypatch
 ):
-    """Saving through File.save should refresh the tracked baseline hash automatically."""
+    """Saving through File.save should keep file valid via embedded trailing hash."""
     import backend.auth as auth
     import backend.group_utils as group_utils
     from backend.file_utils import check_user_file_integrities
@@ -384,7 +384,7 @@ def test_check_user_file_integrities_detects_baseline_hash_mismatch(
     assert user_before is not None
     old_entry = user_before.get("file_info", {}).get(str(file1.path))
     assert old_entry is not None
-    old_hash = old_entry[1]
+    assert old_entry == "secret.txt"
 
     # Re-save with different content. File.save now updates file_info baseline.
     file1.body = "tampered"
@@ -394,14 +394,14 @@ def test_check_user_file_integrities_detects_baseline_hash_mismatch(
     assert user is not None
     new_entry = user.get("file_info", {}).get(str(file1.path))
     assert new_entry is not None
-    assert new_entry[1] != old_hash
+    assert new_entry == "secret.txt"
 
     compromised = check_user_file_integrities(user, home)
     assert "alice/secret.txt" not in compromised
 
 
 def test_sync_file_info_for_user_updates_hash_after_file_edit(tmp_path, monkeypatch):
-    """sync_file_info_for_user should refresh the stored hash after encrypted content changes."""
+    """sync_file_info_for_user should keep decrypted file name in file_info."""
     import backend.auth as auth
     import backend.group_utils as group_utils
     from backend.file_utils import sync_file_info_for_user
@@ -434,7 +434,7 @@ def test_sync_file_info_for_user_updates_hash_after_file_edit(tmp_path, monkeypa
     assert user_before is not None
     old_entry = user_before.get("file_info", {}).get(str(file1.path))
     assert old_entry is not None
-    old_hash = old_entry[1]
+    assert old_entry == "notes.txt"
 
     file1.body = "changed"
     file1.save()
@@ -445,8 +445,7 @@ def test_sync_file_info_for_user_updates_hash_after_file_edit(tmp_path, monkeypa
     assert user_after is not None
     new_entry = user_after.get("file_info", {}).get(str(file1.path))
     assert new_entry is not None
-    assert new_entry[0] == "notes.txt"
-    assert new_entry[1] != old_hash
+    assert new_entry == "notes.txt"
 
 
 def test_remove_file_tracking_for_user_drops_stale_path_entries(tmp_path, monkeypatch):

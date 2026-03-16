@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, TypeAlias
+from typing import Dict, List, TypeAlias
 
-FileInfo: TypeAlias = Tuple[str, str]  # (decrypted file name, file integrity hash)
+FileInfo: TypeAlias = str  # decrypted file name
 
 
 @dataclass

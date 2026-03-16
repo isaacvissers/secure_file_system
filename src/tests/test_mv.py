@@ -180,5 +180,4 @@ def test_mv_updates_persisted_file_info_for_renamed_file(tmp_path, monkeypatch):
 
     new_entry = updated_user.get("file_info", {}).get(str(new_path))
     assert new_entry is not None
-    assert new_entry[0] == "new"
-    assert len(new_entry[1]) == 64
+    assert new_entry == "new"
