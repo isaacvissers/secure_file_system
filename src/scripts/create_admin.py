@@ -8,6 +8,7 @@ if str(SRC_DIR) not in sys.path:
 
 from backend.auth import (
     ADMIN,
+    STORAGE_DIR,
     _user_file_path,
     create_user,
     get_admin_key,
@@ -62,6 +63,8 @@ def ensure_group(name: str):
 
 
 def main() -> None:
+    print(f"Storage directory: {STORAGE_DIR}")
+
     admin_data, status = ensure_admin_user(ADMIN, ADMIN)
     if status in {"created", "updated"}:
         print(f"Admin user {status}: {ADMIN}")

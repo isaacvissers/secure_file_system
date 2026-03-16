@@ -1,0 +1,94 @@
+name: Build Tagged Binaries
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows-x86_64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies and builder
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/requirements.txt pyinstaller
+
+      - name: Build main executable
+        run: |
+          pyinstaller --onefile --name secure-fs --paths src src/main.py
+
+      - name: Build admin setup executable
+        run: |
+          pyinstaller --onefile --name secure-fs-admin-setup --paths src src/scripts/create_admin.py
+
+      - name: Package release binaries (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p release-assets
+          cp dist/secure-fs release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}
+          cp dist/secure-fs-admin-setup release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}
+          chmod +x release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }} release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}
+          tar -C release-assets -czf release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.tar.gz secure-fs-${{ matrix.platform }}-${{ github.ref_name }}
+          tar -C release-assets -czf release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.tar.gz secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}
+          rm -f release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }} release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}
+
+      - name: Package release binaries (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item dist/secure-fs.exe release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.exe
+          Copy-Item dist/secure-fs-admin-setup.exe release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.exe
+          Compress-Archive -Path release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.exe -DestinationPath release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.zip -Force
+          Compress-Archive -Path release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.exe -DestinationPath release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.zip -Force
+          Remove-Item release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.exe
+          Remove-Item release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.exe
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: secure-fs-binaries-${{ matrix.platform }}-${{ github.ref_name }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish-release:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download packaged binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: secure-fs-binaries-*-${{ github.ref_name }}
+          merge-multiple: true
+          path: release-assets
+
+      - name: Create release and attach binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: release-assets/*
