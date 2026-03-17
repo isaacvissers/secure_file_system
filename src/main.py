@@ -285,16 +285,8 @@ class SecureFS(cmd.Cmd):
         if not new_path.is_dir():
             print(f"Error: '{directory_name}' is not a valid directory.")
             return
-        
-        file_key_hex = self.current_user.file_keys.get(str(new_path.parent / f".{new_path.name}"))
-        if not file_key_hex:
-            for group_name, group_info in self.current_user.group_keys.items():
-                group_key = bytes.fromhex(group_info["key"])
-                group_id = group_info["id"]
-                group_obj = Group.get_group(Path(group_id), group_key)
-                if str(new_path.parent / f".{new_path.name}") in group_obj.file_access.keys():
-                    file_key_hex = group_obj.file_access[str(new_path.parent / f".{new_path.name}")]["key"]
-                    break
+
+        file_key_hex = self.current_user.get_file_key(new_path.parent / f".{new_path.name}")
         if file_key_hex is None:
             print(f"Error: You do not have permission to access '{directory_name}'.")
             return
@@ -328,7 +320,7 @@ class SecureFS(cmd.Cmd):
             elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
                 continue
             else:
-                file_key_hex = self.current_user.file_keys.get(str(entry))
+                file_key_hex = self.current_user.get_file_key(entry)
                 decrypted_file = try_decrypt_file(entry, file_key_hex)
                 if decrypted_file:
                     print(decrypted_file.file_name)
@@ -367,7 +359,10 @@ class SecureFS(cmd.Cmd):
 
         # TODO: ensure user has permission to read the file
         try:
-            file_key_hex = self.current_user.file_keys.get(str(file_path))
+            file_key_hex = self.current_user.get_file_key(file_path)
+            if file_key_hex is None:
+                print(f"Error: You do not have permission to access '{file_path.name}'.")
+                return
             file_key = bytes.fromhex(file_key_hex)
             file = File.get_file(file_path, file_key)
             print(file.body)
@@ -456,12 +451,12 @@ class SecureFS(cmd.Cmd):
                 print(f"Error: '{file_name}' is not a valid file.")
                 return
             else:
-                file_key_str = self.current_user.file_keys.get(str(file_path))
-                if not file_key_str:
+                file_key_hex = self.current_user.get_file_key(file_path)
+                if not file_key_hex:
                     print("Error: You do not have permission to modify this file.")
                     return
                 file_key = bytes.fromhex(
-                    file_key_str
+                    file_key_hex
                 )
                 file = File.get_file(
                     file_path,
