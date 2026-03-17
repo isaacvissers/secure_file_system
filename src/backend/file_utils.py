@@ -7,8 +7,7 @@ from typing import Any
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from backend.auth import _get_admin_or_fail, get_admin_record, load_user, save_user
-from backend.group_utils import load_group
+from backend.auth import get_admin_record, load_user, save_user
 from models.file import File
 from models.group import Group
 from models.user import User
@@ -92,37 +91,6 @@ def _normalize_file_key(file_key: Any) -> str:
 
     # Fallback to generic string representation
     return str(file_key)
-
-
-def get_user_file_keys(username: str) -> list:
-    """Return the list of file keys associated with the user."""
-    user = load_user(username)
-    if not user:
-        print(f"User '{username}' not found.")
-        return []
-
-    file_keys = user.get("file_keys", [])
-    if isinstance(file_keys, dict):
-        return list(file_keys.values())
-    if isinstance(file_keys, list):
-        return file_keys
-    return [str(file_keys)]
-
-
-def _infer_file_name(file_name_or_key: Any) -> str:
-    """Return a stable mapping key for storing a user's file key."""
-    path = getattr(file_name_or_key, "path", None)
-    if path is not None:
-        return str(path)
-
-    metadata = getattr(file_name_or_key, "metadata", None)
-    if metadata is not None:
-        metadata_path = getattr(metadata, "path", None)
-        if metadata_path is not None:
-            return str(metadata_path)
-
-    return _normalize_file_key(file_name_or_key)
-
 
 def add_file_to_user(file_name: Any, user: User, file_key: Any = None) -> bool:
     """

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 # from backend.cryptography_utils import *
-from backend.group_utils import add_user_to_group, load_group
+from backend.group_utils import add_user_to_group
 from models.directory import Directory
 from models.user import AdminUser, User
 
@@ -93,24 +93,6 @@ def get_admin_record() -> Optional[AdminUser]:
         return AdminUser(**data)
 
 
-def _get_admin_or_fail() -> Optional[AdminUser]:
-    admin = get_admin_record()
-    if not admin:
-        print("Admin record not found.")
-    return admin
-
-
-def add_user_key_to_admin(username: str, user_key: str) -> None:
-    admin = _get_admin_or_fail()
-    if not admin:
-        return
-
-    if getattr(admin, "user_keys", None) is None:
-        admin.user_keys = {}
-
-    admin.user_keys[username] = user_key
-    save_user(get_admin_key(), admin.__dict__)
-
 
 # --------------------
 # User Storage
@@ -149,51 +131,6 @@ def load_user(username: str) -> Optional[UserDict]:
             return data
     return None
 
-
-def user_exists(username: str) -> bool:
-    return load_user(username) is not None
-
-
-# --------------------
-# User Creation
-# --------------------
-
-
-def create_user(
-    username: str, password: str, is_admin: bool = False
-) -> Optional[UserDict]:
-    """Create a new user or admin. Returns user dict."""
-    if user_exists(username):
-        print(f"User '{username}' already exists.")
-        return None
-
-    user_key = create_user_key(username, password)
-    user_dict: UserDict = {
-        "username": username,
-        "file_keys": {},
-        "group_keys": {},
-    }
-
-    if is_admin:
-        user_dict["user_keys"] = {}
-        user_dict["group_keys"] = {}
-
-    save_user(user_key, user_dict)
-    add_user_key_to_admin(username, user_key)
-
-    if not is_admin:
-        dir = create_user_directory(user_dict["username"])
-
-        if load_group("all") is None:
-            from backend.group_utils import create_group
-
-            create_group("all")
-
-        added_to_group = add_user_to_group("all", username)
-        if not added_to_group:
-            print(f"Failed to add user '{username}' to group 'all'.")
-            return
-    return user_dict
 
 
 def create_user_directory(user: User) -> Path:

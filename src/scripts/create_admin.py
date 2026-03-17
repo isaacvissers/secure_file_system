@@ -9,11 +9,10 @@ if str(SRC_DIR) not in sys.path:
 from backend.auth import (
     ADMIN,
     _user_file_path,
-    create_user,
     get_admin_key,
     get_admin_record,
 )
-from backend.group_utils import add_group_to_user, add_user_to_group, load_group
+from backend.group_utils import add_group_to_user, load_group
 from models.group import Group
 from models.user import AdminUser
 
