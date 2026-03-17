@@ -5,11 +5,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 import backend.auth as auth
 import main as main_module
 from backend.auth import FILES_DIR
 from main import SecureFS
+from models.file import File, Permission
+from tests.tamper_helpers import flip_last_hash_nibble
 
 
 def _home_path(base: Path, username: str) -> Path:
@@ -203,3 +206,56 @@ def test_login_password_branch(monkeypatch, capsys, temp_files_dir):
     # Should succeed because current placeholder logic does not verify password
     assert shell.current_user == user_data
     assert shell.prompt == f"SFS/{_home_path(temp_files_dir, 'alice').name}> "
+
+
+def test_login_warns_with_decrypted_name_for_hash_only_tamper(
+    monkeypatch, capsys, temp_files_dir
+):
+    """Login warning should show decrypted filename when only trailing hash nibble is modified."""
+    username = "alice"
+    home = _home_path(temp_files_dir, username)
+    home.mkdir(parents=True, exist_ok=True)
+
+    logical_name = "test.txt"
+    encrypted_name = hashlib.sha256(logical_name.encode("utf-8")).hexdigest()
+    file_path = home / encrypted_name
+    file_key = AESGCM.generate_key(bit_length=256)
+
+    file = File(
+        file_name=logical_name,
+        owner_name=username,
+        permission=Permission.USER,
+        encrypted_name=encrypted_name,
+        body="original\n",
+        encrypted_file_key=file_key,
+        path=file_path,
+    )
+    file.save()
+
+    # Exact scenario: mutate only the final hash hex character while logged out.
+    flip_last_hash_nibble(file_path)
+
+    user_data = {
+        "username": username,
+        "file_keys": {str(file_path): file_key.hex()},
+        "group_keys": [],
+    }
+
+    monkeypatch.setattr(main_module, "prompt_credentials", lambda: (username, "pw"))
+    monkeypatch.setattr(main_module, "load_user", lambda _: user_data)
+    monkeypatch.setattr(
+        main_module,
+        "get_admin_record",
+        lambda: SimpleNamespace(user_keys={username: username}),
+    )
+    monkeypatch.setattr(
+        auth, "_resolve_user", lambda admin, uname: (username, user_data)
+    )
+
+    shell = SecureFS()
+    shell.do_login("")
+
+    out = capsys.readouterr().out
+    assert "Warning: The following files may have been compromised:" in out
+    assert f"- {username}/{logical_name}" in out
+    assert f"- {username}/{encrypted_name}" not in out

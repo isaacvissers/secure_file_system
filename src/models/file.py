@@ -73,7 +73,8 @@ class File:
             if len(payload) < 13:
                 raise ValueError("Encrypted file is too short")
             nonce = payload[:12]
-            encrypted_blob = payload[12:]
+            encrypted_blob = payload[12:-64]
+            stored_hash = payload[-64:].decode("utf-8")
             decrypted = AESGCM(file_key).decrypt(nonce, encrypted_blob, None)
             data = json.loads(decrypted.decode("utf-8"))
 
@@ -116,4 +117,27 @@ class File:
         data = self.to_json().encode("utf-8")
         nonce = os.urandom(12)
         encrypted_blob = AESGCM(self.encrypted_file_key).encrypt(nonce, data, None)
-        self.path.write_bytes(nonce + encrypted_blob)  # TODO add integrity check here.
+        # self.path.write_bytes(nonce + encrypted_blob)
+        # Add some integrity check by saving a hash of the encrypted content
+        integrity_hash = hashlib.sha256(nonce + encrypted_blob).hexdigest()
+        self.path.write_bytes((nonce + encrypted_blob) + integrity_hash.encode("utf-8"))
+
+        # Keep user file_info in sync whenever file bytes are rewritten.
+        from backend.file_utils import (  # must be here to avoid circular imports
+            sync_file_info_for_user,
+        )
+
+        sync_file_info_for_user(self.owner_name, self.path, self.encrypted_file_key)
+
+    def check_integrity(self) -> bool:
+        """Check the integrity of the file by comparing the stored hash with a hash of the current content."""
+        content = self.path.read_bytes()
+        if len(content) < 64:  # nonce (12) + encrypted_blob (at least 1) + hash (32)
+            return False
+        nonce = content[:12]
+        encrypted_blob = content[12:-64]
+        stored_hash = content[-64:].decode("utf-8")
+        computed_hash = hashlib.sha256(nonce + encrypted_blob).hexdigest()
+        return stored_hash == computed_hash
+
+        # return True  # Placeholder for actual integrity check logic
