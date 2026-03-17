@@ -1,3 +1,5 @@
+import hashlib
+
 import main as main_module
 from main import SecureFS
 from models.directory import Directory
@@ -15,10 +17,13 @@ def _logged_in_shell(tmp_path, monkeypatch):
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
 
     user = User(username="alice", path=str(tmp_path / "alice-user.json"))
+    user_key = hashlib.sha256(b"cat-shell").digest()
+    user._encryption_key = user_key
     user_home = Directory.create(tmp_path, "alice", user)
 
     shell = SecureFS()
     shell.current_user = user
+    shell.current_user_key = user_key
     shell.current_working_directory = user_home.path
     shell._update_prompt()
     return shell

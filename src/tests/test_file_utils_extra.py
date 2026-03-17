@@ -20,7 +20,9 @@ def make_group(tmp_path, name="dev"):
         file_access={},
         path=tmp_path / f"{name}.json",
     )
-    group.save()
+    key = b"\x03" * 32
+    group.save(key)
+    group._test_key = key
     return group
 
 
@@ -34,7 +36,12 @@ def test_add_file_to_group_stores_access_entry(tmp_path):
     user = make_user(tmp_path, "alice")
     group = make_group(tmp_path, "dev")
     file = File.create(tmp_path, "notes", user)
-    assert add_file_to_group(group, "ab" * 32, file, file.encrypted_file_key) is True
+    assert (
+        add_file_to_group(
+            group, bytes.fromhex("ab" * 32), file, file.encrypted_file_key
+        )
+        is True
+    )
     entry = group.file_access[str(file.path)]
     assert entry["name"] == "notes"
     assert entry["owner"] == "alice"

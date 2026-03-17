@@ -7,12 +7,19 @@ from typing import Any, Dict, Optional, Tuple, TypeAlias
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from backend.constants import ADMIN, SALT
+
 SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"
 USERS_DIR.mkdir(parents=True, exist_ok=True)
-ADMIN = "admin"
 
 FileInfo: TypeAlias = str  # decrypted file name
+
+
+def derive_user_file_key(username: str, password: str) -> bytes:
+    """Deterministically derive the AES key used to encrypt a user's record."""
+    raw = f"{username}_{password}_{SALT}"
+    return hashlib.sha256(raw.encode("utf-8")).digest()
 
 
 @dataclass
@@ -32,7 +39,7 @@ class User:
 
     @classmethod
     def create(cls, name: str, password: str):
-        master_key = os.urandom(32).hex()
+        master_key = derive_user_file_key(name, password)
         encrypted_name = hashlib.sha256(name.encode("utf-8")).hexdigest()
         real_path = USERS_DIR / encrypted_name
 
@@ -40,40 +47,66 @@ class User:
         verifier = hashlib.sha256((password + salt).encode("utf-8")).hexdigest()
 
         instance = cls(
-            username=name, auth_salt=salt, auth_verifier=verifier, path=real_path
+            username=name, auth_salt=salt, auth_verifier=verifier, path=str(real_path)
         )
-        instance.save()
+        instance._encryption_key = master_key
+        instance.save(master_key)
         return instance, master_key
 
     @classmethod
-    def get_user(cls, path: Path, file_key: bytes | None = None) -> Optional["User"]:
+    def get_user(
+        cls, path: Path, file_key: bytes | None = None
+    ) -> Tuple[Optional["User"], Optional[bytes]]:
+        """Load and decrypt a user record."""
         if file_key is None:
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                data = json.loads(path.read_text(encoding="utf-8"))
             except Exception:
-                return None
-        else:
-            payload = path.read_bytes()
-            # if len(payload) < 13:
-            #     raise ValueError("Encrypted file is too short")
-            # nonce = payload[:12]
-            # encrypted_blob = payload[12:]
-            # decrypted = AESGCM(file_key).decrypt(nonce, encrypted_blob, None)
-            # data = json.loads(decrypted.decode("utf-8"))
-            # TODO: REMOVE!!!
-            data = json.loads(payload.decode("utf-8"))
+                return None, None
+            data["path"] = str(path)
+            user = cls(**data)
+            return user, None
 
-        data["path"] = Path(path) if isinstance(path, (str, Path)) else path
-        return cls(**data), file_key
+        try:
+            payload = path.read_bytes()
+            if len(payload) < 13:
+                return None, None
+
+            nonce = payload[:12]
+            ciphertext = payload[12:]
+
+            aesgcm = AESGCM(file_key)
+            decrypted = aesgcm.decrypt(nonce, ciphertext, None)
+            data = json.loads(decrypted.decode("utf-8"))
+            data["path"] = str(path)
+            user = cls(**data)
+            user._encryption_key = file_key
+            return user, file_key
+        except Exception:
+            return None, None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=4, default=str)
 
-    def save(self) -> None:
+    def save(self, file_key: bytes | str) -> None:
+        """Encrypt and save the user record."""
         if not self.path:
             raise ValueError("User path not set")
-        Path(self.path).write_text(self.to_json(), encoding="utf-8")
+
+        if isinstance(file_key, str):
+            try:
+                file_key = bytes.fromhex(file_key)
+            except ValueError:
+                file_key = hashlib.sha256(file_key.encode()).digest()
+
+        if not file_key:
+            raise ValueError("File key is required to encrypt user data.")
+
+        json_data = self.to_json().encode("utf-8")
+        nonce = os.urandom(12)
+        aesgcm = AESGCM(file_key)
+        ciphertext = aesgcm.encrypt(nonce, json_data, None)
+        Path(self.path).write_bytes(nonce + ciphertext)
 
     def verify_password(self, password: str) -> bool:
         """Hash the provided password with the stored salt and compare."""

@@ -71,16 +71,18 @@ def test_add_user_to_admin_updates_admin_mapping(tmp_path):
         auth_verifier="verifier",
         path=admin_path,
     )
-    admin.save()
+    admin_file_key = b"\xaa" * 32
+    admin.save(admin_file_key)
 
     target_path = tmp_path / "target-user-file"
     target = User(username="neo", path=target_path)
 
-    auth.add_user_to_admin(admin, target, "masterkey123")
+    auth.add_user_to_admin(admin, target, "masterkey123", admin_file_key)
 
-    saved = json.loads(admin_path.read_text(encoding="utf-8"))
-    assert saved["user_keys"]["neo"]["id"] == target_path.name
-    assert saved["user_keys"]["neo"]["key"] == "masterkey123"
+    loaded_admin, _ = AdminUser.get_user(admin_path, admin_file_key)
+    assert loaded_admin is not None
+    assert loaded_admin.user_keys["neo"]["id"] == target_path.name
+    assert loaded_admin.user_keys["neo"]["key"] == "masterkey123"
 
 
 def test_user_file_path_uses_users_dir(tmp_path, monkeypatch):

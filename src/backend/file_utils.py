@@ -92,7 +92,12 @@ def _normalize_file_key(file_key: Any) -> str:
     return str(file_key)
 
 
-def add_file_to_user(file_name: Any, user: User, file_key: Any = None) -> bool:
+def add_file_to_user(
+    file_name: Any,
+    user: User,
+    file_key: Any = None,
+    user_file_key: bytes | None = None,
+) -> bool:
     """
     Normalize `file_key` and add it to the user's `file_keys` list.
     Also add additional file information to user file.
@@ -129,7 +134,10 @@ def add_file_to_user(file_name: Any, user: User, file_key: Any = None) -> bool:
         if hashes:
             user.file_info[file_name] = file.file_name
 
-    user.save()
+    save_key = user_file_key or getattr(user, "_encryption_key", None)
+    if not save_key:
+        raise ValueError("Missing user file key when saving metadata")
+    user.save(save_key)
 
     return True
 
@@ -201,7 +209,10 @@ def sync_file_info_for_user(user: User, file: File) -> bool:
         return False
 
     user.file_info[path_key] = file.file_name
-    user.save()
+    save_key = getattr(user, "_encryption_key", None)
+    if not save_key:
+        raise ValueError("Missing user file key when saving metadata")
+    user.save(save_key)
     return True
 
 
@@ -221,7 +232,10 @@ def remove_file_tracking_for_user(user: User, tracked_path: str | Path) -> bool:
         changed = True
 
     if changed:
-        user.save()
+        save_key = getattr(user, "_encryption_key", None)
+        if not save_key:
+            raise ValueError("Missing user file key when saving metadata")
+        user.save(save_key)
     return changed
 
 

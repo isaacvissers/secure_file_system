@@ -3,7 +3,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-# from backend.cryptography_utils import *
+from backend.constants import ADMIN, SALT, SALT_BYTES
 from backend.group_utils import add_user_to_group
 from backend.storage_paths import get_storage_dir
 from models.directory import Directory
@@ -15,10 +15,6 @@ USERS_DIR.mkdir(parents=True, exist_ok=True)
 
 FILES_DIR = STORAGE_DIR / "files"
 FILES_DIR.mkdir(parents=True, exist_ok=True)
-
-SALT_BYTES = 16
-ADMIN = "admin"
-SALT = "psalt"
 
 UserDict = Dict[str, Any]
 
@@ -94,11 +90,21 @@ def create_user_directory(user: User) -> Path:
 # --------------------
 
 
-def add_user_to_admin(admin: AdminUser, target_user: User, user_master_key: str):
+def add_user_to_admin(
+    admin: AdminUser,
+    target_user: User,
+    user_master_key: bytes | str,
+    admin_file_key: bytes | str | None = None,
+) -> None:
     """
     Adds a new user to the admin's user_keys
     """
     file_id = Path(target_user.path).name
-    admin.user_keys[target_user.username] = {"id": file_id, "key": user_master_key}
+    if isinstance(user_master_key, (bytes, bytearray)):
+        key_hex = user_master_key.hex()
+    else:
+        key_hex = str(user_master_key)
+    admin.user_keys[target_user.username] = {"id": file_id, "key": key_hex}
 
-    admin.save()
+    if admin_file_key is not None:
+        admin.save(admin_file_key)
