@@ -7,6 +7,8 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from models.user import User
+
 
 class Permission(Enum):
     USER = "user"
@@ -29,7 +31,7 @@ class File:
         cls,
         working_dir: Path,
         name: str,
-        owner_name: str,
+        user: User,
         body: str = "",
         permission: Permission = Permission.USER,
         is_metadata: bool = False,
@@ -46,7 +48,7 @@ class File:
             raise FileExistsError(f"{real_path} already exists")
         instance = cls(
             file_name=name,
-            owner_name=owner_name,
+            owner_name=user.username,
             permission=permission,
             encrypted_name=encrypted_name,
             body=body,
@@ -56,7 +58,7 @@ class File:
         instance.save()
         from backend.file_utils import add_file_to_user
 
-        add_file_to_user(str(real_path), file_key, owner_name)
+        add_file_to_user(str(real_path), user, file_key)
         return instance
 
     @classmethod
@@ -88,12 +90,10 @@ class File:
             path=Path(data["path"]),
         )
 
-    def rename_file(self, new_name: str) -> None:
+    def rename_file(self, user: User, new_name: str) -> None:
         """Rename the file on disk to <new_name> and change File instance to use updated name and path."""
         # TODO we need to handle the case with directories afterwards
-        File.create(
-            self.path.parent, new_name, self.owner_name, self.body, self.permission
-        )
+        File.create(self.path.parent, new_name, user, self.body, self.permission)
 
         # delete the old file
         # TODO need to remove the file completely, which will require accessing user and groups

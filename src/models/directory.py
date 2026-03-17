@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from models.file import File
+from models.user import User
 
 
 @dataclass
@@ -11,7 +12,7 @@ class Directory:
     path: Path
 
     @classmethod
-    def create(cls, working_dir: Path, name: str, owner_name: str) -> "Directory":
+    def create(cls, working_dir: Path, name: str, user: User) -> "Directory":
         """Create the directory on disk and return a Directory instance."""
         encrypted_name = hashlib.sha256(name.encode("utf-8")).hexdigest()
 
@@ -21,7 +22,7 @@ class Directory:
         real_path.mkdir(parents=True, exist_ok=False)
         return cls(
             path=real_path,
-            metadata=File.create(working_dir, name, owner_name, is_metadata=True),
+            metadata=File.create(working_dir, name, user, is_metadata=True),
         )
 
         metadata = File.create(working_dir, "." + name, owner_name)

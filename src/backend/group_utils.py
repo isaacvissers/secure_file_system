@@ -3,21 +3,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import backend.auth as auth
+from models.group import Group
+from models.user import AdminUser, User
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 GROUPS_DIR = SRC_DIR / "storage/.groups"
 GROUPS_DIR.mkdir(parents=True, exist_ok=True)
 
 GroupsDict = Dict[str, Any]
-
-
-# --------------------
-# Key Utilities
-# --------------------
-
-
-def create_group_key(name: str) -> str:
-    return f"group_{name}"
 
 
 # --------------------
@@ -46,178 +39,79 @@ def load_group(name: str) -> Optional[GroupsDict]:
         return json.load(f)
 
 
-def save_group(group_key: str, group_dict: GroupsDict) -> None:
-    path = _group_file(group_key)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(group_dict, f)
-
-
 # --------------------
-# Group Creation
+# User Management (Add/Remove User from Group)
 # --------------------
+def get_groups_by_user(user: User | AdminUser) -> List[Group]:
+    """Retrieve all Group objects that the user has access to."""
+    groups = []
+
+    if not user.group_keys:
+        return groups
+
+    for group_path_str in user.group_keys.keys():
+        group_path = Path(group_path_str)
+        if group_path.exists():
+            try:
+                group_obj = Group.get_group(group_path)
+                groups.append(group_obj)
+            except Exception as e:
+                print(f"Error loading group at {group_path}: {e}")
+
+    return groups
 
 
-def create_group(name: str) -> Optional[GroupsDict]:
-    admin = auth.get_admin_record()
-    if not admin:
-        print("Admin record not found.")
-        return None
+def get_specific_group_for_user(
+    user: User | AdminUser, target_name: str
+) -> Optional[Group]:
+    """Find a specific group by name from the user's allowed groups."""
+    all_user_groups = get_groups_by_user(user)
 
-    if name in admin.group_keys:
-        print(f"Group '{name}' already exists.")
-        return None
+    for group in all_user_groups:
+        if group.group_name == target_name:
+            return group
 
-    group_key = create_group_key(name)
+    return None
 
-    group = {
-        "group_name": name,
-        "members": {},
-        "file_access": [],
+
+def add_user_to_group(user, group: Group) -> bool:
+    """Add a user to the group's member list."""
+    group.members[user.username] = str(user.path)
+    group.save()
+    return True
+
+
+def add_group_to_user(user: User | AdminUser, group: Group, master_key: str) -> bool:
+    """Store group access metadata inside a user's group_keys mapping."""
+    group_id = str(group.path)
+    user.group_keys[group.group_name] = {
+        "id": group_id,  # the ACTUAL path to the group
+        "key": master_key,  # AES key for the group
     }
 
-    save_group(group_key, group)
-
-    admin.group_keys[name] = group_key
-    auth.save_user(auth.get_admin_key(), admin.__dict__)
-
-    return group
-
-
-# --------------------
-# User Management
-# --------------------
-
-
-def get_user_groups_by_username(username: str) -> List[str]:
-    admin = auth.get_admin_record()
-    if not admin:
-        print("Admin record not found.")
-        return []
-    user_key = admin.user_keys.get(username)
-    if not user_key:
-        print(f"User '{username}' not found.")
-        return []
-    user = auth.load_user(username)
-    if not user:
-        print("User file not found.")
-        return []
-    # Stored in the user record are group storage keys (e.g. 'group_p').
-    # Convert those to group names using the admin index so callers get
-    # human-readable group names.
-    user_gkeys = user.get("group_keys", [])
-    if not user_gkeys:
-        return []
-
-    # build reverse mapping group_key -> group_name
-    rev = {v: k for k, v in (admin.group_keys or {}).items()}
-    result: List[str] = []
-    for gk in user_gkeys:
-        name = rev.get(gk)
-        if name:
-            result.append(name)
-    return result
-
-
-def add_user_to_group(group_name: str, username: str) -> bool:
-    admin = auth.get_admin_record()
-    if not admin:
-        print("Admin record not found.")
-        return False
-
-    group_key = admin.group_keys.get(group_name)
-    if not group_key:
-        print(f"Group '{group_name}' not found.")
-        return False
-
-    user_key = admin.user_keys.get(username)
-    if not user_key:
-        print(f"User '{username}' not found.")
-        return False
-
-    group = load_group(group_name)
-    if not group:
-        print("Group file not found.")
-        return False
-
-    user = auth.load_user(username)
-    if not user:
-        print("User file not found.")
-        return False
-
-    if not _add_member_to_group(group, username, user_key):
-        return False
-
-    _add_group_to_user(user, group_key)
-
-    save_group(group_key, group)
-    auth.save_user(user_key, user)
-
+    user.save()
     return True
 
 
-# --------------------
-# Helpers
-# --------------------
-
-
-def _add_member_to_group(group: dict, username: str, user_key: str) -> bool:
-    members = group.setdefault("members", {})
-
-    if user_key in members:
-        print("User already in group.")
+def remove_user_from_group(user: User | AdminUser, group: Group) -> bool:
+    """Remove a user's access from the group's member list."""
+    if user.username in group.members:
+        del group.members[user.username]
+        group.save()
+        return True
+    else:
+        print(f"User {user.username} not found in group {group.group_name}.")
         return False
 
-    members[user_key] = username
-    return True
 
+def remove_group_from_user(user: User | AdminUser, group: Group) -> bool:
+    """Remove group access metadata (path and key) from the user's mapping."""
+    group_id = str(group.path)
 
-def _add_group_to_user(user: dict, group_key: str):
-    group_keys = user.setdefault("group_keys", [])
-
-    if group_key not in group_keys:
-        group_keys.append(group_key)
-
-
-def remove_user_from_group(group_name: str, username: str) -> bool:
-    admin = auth.get_admin_record()
-    if not admin:
-        print("Admin record not found.")
+    if user.group_keys and group_id in user.group_keys:
+        del user.group_keys[group_id]
+        user.save()
+        return True
+    else:
+        print(f"Group key for {group.group_name} not found in user's profile.")
         return False
-
-    group_key = admin.group_keys.get(group_name)
-    if not group_key:
-        print(f"Group '{group_name}' not found.")
-        return False
-
-    user_key = admin.user_keys.get(username)
-    if not user_key:
-        print(f"User '{username}' not found.")
-        return False
-
-    group = load_group(group_name)
-    if not group:
-        print("Group file not found.")
-        return False
-
-    members = group.setdefault("members", {})
-    if username not in members:
-        print("User is not a member of the group.")
-        return False
-
-    # remove member from group
-    members.pop(username, None)
-
-    # remove group from user's group_keys
-    user = auth.load_user(username)
-    if user is None:
-        print("User file not found.")
-        return False
-
-    gkeys = user.setdefault("group_keys", [])
-    if group_key in gkeys:
-        gkeys.remove(group_key)
-
-    save_group(group_key, group)
-    auth.save_user(user_key, user)
-
-    return True

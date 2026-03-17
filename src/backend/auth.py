@@ -3,8 +3,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from backend.cryptography_utils import *
-from backend.group_utils import add_user_to_group, load_group, save_group
+# from backend.cryptography_utils import *
+from backend.group_utils import add_user_to_group, load_group
 from models.directory import Directory
 from models.user import AdminUser, User
 
@@ -171,7 +171,7 @@ def create_user(
     user_dict: UserDict = {
         "username": username,
         "file_keys": {},
-        "group_keys": [],
+        "group_keys": {},
     }
 
     if is_admin:
@@ -196,9 +196,9 @@ def create_user(
     return user_dict
 
 
-def create_user_directory(username: str) -> Path:
+def create_user_directory(user: User) -> Path:
     """Create the home directory for a new user under FILES_DIR."""
-    return Directory.create(FILES_DIR, username, username)
+    return Directory.create(FILES_DIR, user.username, user)
 
 
 # --------------------
@@ -221,3 +221,13 @@ def _resolve_user(
         return None, None
 
     return user_key, user
+
+
+def add_user_to_admin(admin: AdminUser, target_user: User, user_master_key: str):
+    """
+    Adds a new user to the admin's user_keys
+    """
+    file_id = Path(target_user.path).name
+    admin.user_keys[target_user.username] = {"id": file_id, "key": user_master_key}
+
+    admin.save()

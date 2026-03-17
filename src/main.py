@@ -2,17 +2,35 @@ import cmd
 import hashlib
 import json
 import shlex
+from pathlib import Path
 
-from backend.auth import *
-from backend.auth import FILES_DIR
-from backend.cryptography_utils import *
-from backend.file_utils import *
-from backend.file_utils import add_file_to_group
-from backend.group_utils import *
-from backend.group_utils import get_user_groups_by_username
+# from backend.auth import *
+from backend.auth import (
+    FILES_DIR,
+    add_user_to_admin,
+    create_user_directory,
+    requires_admin,
+    requires_logged_out,
+    requires_login,
+)
+
+# from backend.cryptography_utils import *
+# from backend.file_utils import *
+from backend.file_utils import (
+    add_file_to_group,
+    check_user_file_integrities,
+    remove_file_tracking_for_user,
+    try_decrypt_directory,
+    try_decrypt_file,
+)
+from backend.group_utils import add_group_to_user, add_user_to_group
 from cli_utils import *
 from models.directory import Directory
 from models.file import File, Permission
+from models.group import Group
+from models.user import ADMIN, USERS_DIR, AdminUser, User
+
+# from models.group import Group
 
 
 class SecureFS(cmd.Cmd):
@@ -33,7 +51,7 @@ class SecureFS(cmd.Cmd):
         if not metadata_path.exists() or not self.current_user:
             return encrypted_dir_name
 
-        file_key_hex = self.current_user.get("file_keys", {}).get(str(metadata_path))
+        file_key_hex = self.current_user.file_keys.get(str(metadata_path))
         decrypted_dir = try_decrypt_directory(metadata_path, file_key_hex)
         if decrypted_dir:
             return decrypted_dir.file_name.lstrip(".")
@@ -76,24 +94,23 @@ class SecureFS(cmd.Cmd):
         """Reload current user data from storage while preserving session state."""
         if not self.current_user:
             return
-        username = self.current_user.get("username")
+        username = self.current_user.username
         if not username:
             return
-        current_user = dict(self.current_user)
+        current_user = self.current_user
         if file_key_updates:
-            current_user.setdefault("file_keys", {}).update(file_key_updates)
+            self.current_user.file_keys.update(file_key_updates)
 
-        refreshed_user = load_user(username)
+        refreshed_user, _ = User.get_user(self.current_user.path, self.current_user_key)
         if refreshed_user is None:
             self.current_user = current_user
             return
 
-        merged_user = {**current_user, **refreshed_user}
-        merged_user["file_keys"] = {
-            **current_user.get("file_keys", {}),
-            **refreshed_user.get("file_keys", {}),
-        }
-        self.current_user = merged_user
+        merged_file_keys = refreshed_user.file_keys.copy()
+        merged_file_keys.update(self.current_user.file_keys)
+
+        refreshed_user.file_keys = merged_file_keys
+        self.current_user = refreshed_user
 
     @requires_logged_out
     def do_login(self, arg):
@@ -105,53 +122,46 @@ class SecureFS(cmd.Cmd):
             return
         username, password = credentials
 
-        admin = get_admin_record()
-        if not admin:
-            print("Error: Admin record missing.")
+        encrypted_name = hashlib.sha256(username.encode("utf-8")).hexdigest()
+        user_file_path = USERS_DIR / encrypted_name
+
+        if not user_file_path.exists():
+            print(f"Error: User '{username}' does not exist.")
             return
 
         if username == ADMIN:
-            # Use the AdminUser object for admin login
-            expected_key = auth.create_user_key(username, password)
-            admin_key = auth.get_admin_key()
-            if expected_key != admin_key:
-                print("Error: Incorrect password.")
-                return
-            self.current_user = admin
-            # set working directory for admin session
-            self.current_working_directory = (
-                FILES_DIR / hashlib.sha256(username.encode("utf-8")).hexdigest()
-            )
+            user, user_key = AdminUser.get_user(user_file_path)
         else:
-            user_key, user_dict = auth._resolve_user(admin, username)
-            if not user_dict:
-                print(f"Error: User '{username}' does not exist.")
-                return
+            user, user_key = User.get_user(user_file_path)
 
-            expected_key = auth.create_user_key(username, password)
-            if user_key != expected_key:
-                print("Error: Incorrect password.")
-                return
+        if not user:
+            print("Error: Could not load user record.")
+            return
 
-            self.current_user = user_dict
-            # set working directory to the user's files directory
-            self.current_working_directory = (
-                FILES_DIR / hashlib.sha256(username.encode("utf-8")).hexdigest()
+        if not user.verify_password(password):
+            print("Error: Incorrect password.")
+            return
+
+        self.current_user = user
+        self.current_user_key = user_key
+
+        # set working directory to the user's files directory
+        self.current_working_directory = (
+            FILES_DIR / hashlib.sha256(username.encode("utf-8")).hexdigest()
+        )
+
+        # Check owned files recursively for offline tampering.
+        compromised_paths = []
+        if self.current_working_directory.exists():
+            compromised_paths = check_user_file_integrities(
+                self.current_user,
+                self.current_working_directory,
             )
-
-            # Check owned files recursively for offline tampering.
-            compromised_paths = []
-            if self.current_working_directory.exists():
-                compromised_paths = check_user_file_integrities(
-                    self.current_user,
-                    self.current_working_directory,
-                )
-
-            if compromised_paths:
-                print("Warning: The following files may have been compromised:")
-                print()
-                for path in compromised_paths:
-                    print(f"- {path}")
+        if compromised_paths:
+            print("Warning: The following files may have been compromised:")
+            print()
+            for path in compromised_paths:
+                print(f"- {path}")
 
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
@@ -182,16 +192,14 @@ class SecureFS(cmd.Cmd):
         # TODO this check should be handled in the Directory.create method instead to ensure all directory creation is safe, not just creation through the CLI
         if not self.current_working_directory.is_relative_to(
             FILES_DIR
-            / hashlib.sha256(self.current_user["username"].encode("utf-8")).hexdigest()
+            / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
         ):
             print("Error: Cannot create directories outside of your home directory.")
             return
 
         try:
             Directory.create(
-                self.current_working_directory,
-                directory_name,
-                self.current_user["username"],
+                self.current_working_directory, directory_name, self.current_user
             )
             self._refresh_current_user()
 
@@ -214,14 +222,14 @@ class SecureFS(cmd.Cmd):
 
         if not self.current_working_directory.is_relative_to(
             FILES_DIR
-            / hashlib.sha256(self.current_user["username"].encode("utf-8")).hexdigest()
+            / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
         ):
             print("Error: Cannot create files outside of your home directory.")
             return
 
         try:
             file = File.create(
-                self.current_working_directory, file_name, self.current_user["username"]
+                self.current_working_directory, file_name, self.current_user
             )
             self._refresh_current_user({str(file.path): file.encrypted_file_key.hex()})
             print(f"File '{file_name}' created.")
@@ -239,9 +247,7 @@ class SecureFS(cmd.Cmd):
             # go to users home directory if no argument provided
             self.current_working_directory = (
                 FILES_DIR
-                / hashlib.sha256(
-                    self.current_user["username"].encode("utf-8")
-                ).hexdigest()
+                / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
             )
             self._update_prompt()
             return
@@ -293,7 +299,7 @@ class SecureFS(cmd.Cmd):
             elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
                 continue
             else:
-                file_key_hex = self.current_user["file_keys"].get(str(entry))
+                file_key_hex = self.current_user.file_keys.get(str(entry))
                 decrypted_file = try_decrypt_file(entry, file_key_hex)
                 if decrypted_file:
                     print(decrypted_file.file_name)
@@ -332,7 +338,7 @@ class SecureFS(cmd.Cmd):
 
         # TODO: ensure user has permission to read the file
         try:
-            file_key_hex = self.current_user["file_keys"].get(str(file_path))
+            file_key_hex = self.current_user.file_keys.get(str(file_path))
             file_key = bytes.fromhex(file_key_hex)
             file = File.get_file(file_path, file_key)
             print(file.body)
@@ -406,7 +412,7 @@ class SecureFS(cmd.Cmd):
                 file = File.create(
                     self.current_working_directory,
                     logical_name,
-                    self.current_user["username"],
+                    self.current_user,
                     body=output,
                 )
                 self._refresh_current_user(
@@ -415,7 +421,7 @@ class SecureFS(cmd.Cmd):
             else:
                 file = File.get_file(
                     file_path,
-                    bytes.fromhex(self.current_user["file_keys"].get(str(file_path))),
+                    bytes.fromhex(self.current_user.file_keys.get(str(file_path))),
                 )
                 file.body = file.body + output if append_mode else output
                 file.save()
@@ -451,10 +457,10 @@ class SecureFS(cmd.Cmd):
         if dest_path.exists():
             print(f"Error: Destination file '{dest_name}' already exists.")
             return
-        file_key = bytes.fromhex(self.current_user["file_keys"].get(str(source_path)))
+        file_key = bytes.fromhex(self.current_user.file_keys.get(str(source_path)))
         file = File.get_file(source_path, file_key)
-        file.rename_file(dest_name)
-        remove_file_tracking_for_user(self.current_user["username"], source_path)
+        file.rename_file(self.current_user, dest_name)
+        remove_file_tracking_for_user(self.current_user, source_path)
         self._refresh_current_user()
 
     @requires_login
@@ -495,13 +501,11 @@ class SecureFS(cmd.Cmd):
         if (
             not file_path.is_relative_to(
                 FILES_DIR
-                / hashlib.sha256(
-                    self.current_user["username"].encode("utf-8")
-                ).hexdigest()
+                / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
             )
             and not file_path
             == FILES_DIR
-            / hashlib.sha256(self.current_user["username"].encode("utf-8")).hexdigest()
+            / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
         ):
             print("Error: You are not the owner of this file.")
             return
@@ -532,52 +536,63 @@ class SecureFS(cmd.Cmd):
         for target_path in target_paths:
             if target_path.is_dir():
                 continue
-            file_key = bytes.fromhex(
-                self.current_user["file_keys"].get(str(target_path))
-            )
+            file_key = bytes.fromhex(self.current_user.file_keys.get(str(target_path)))
             file = File.get_file(target_path, file_key)
             file.permission = Permission(permissions)
             file.save()
             if permissions == Permission.GROUP.value:
                 file_key = file.encrypted_file_key
-                for g in get_user_groups_by_username(self.current_user["username"]):
-                    add_file_to_group(g, file_key)
+                for group_name, group_info in self.current_user.group_keys.items():
 
-    @requires_login
-    def do_get_permissions(self, arg):
-        """
-        Usage: get_permissions <file_name>
-        """
-        if not arg.strip():
-            print("Error: File name is required.")
-            return
+                    if group_name.lower() == "all":
+                        continue
 
-        file_name = arg.strip()
-        file_path = (
-            self.current_working_directory
-            / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
-        )
+                    group_key = bytes.fromhex(group_info["key"])
+                    group_id = group_info["id"]
 
-        if file_path.is_dir():
-            metadata_path = (
-                self.current_working_directory
-                / f".{hashlib.sha256(file_name.encode('utf-8')).hexdigest()}"
-            )
-            if not metadata_path.exists():
-                print(f"Error: Metadata for directory '{file_name}' does not exist.")
-                return
-            file_path = metadata_path
+                    group_obj = Group.get_group(Path(group_id), group_key)
 
-        if not file_path.is_file():
-            print(f"Error: '{file_name}' is not a valid file.")
-            return
+                    if group_obj:
+                        # 3. Call our updated helper to add the file and save the group
+                        add_file_to_group(group_obj, group_key, file, file_key)
+                    else:
+                        print(f"Error: Could not access group record for {group_name}")
 
-        try:
-            file_key = bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
-            file = File.get_file(file_path, file_key)
-            print(file.permission.value)
-        except Exception as e:
-            print(f"Error reading file: {e}")
+    #     @requires_login
+    #     def do_get_permissions(self, arg):
+    #         """
+    #         Usage: get_permissions <file_name>
+    #         """
+    #         if not arg.strip():
+    #             print("Error: File name is required.")
+    #             return
+
+    #         file_name = arg.strip()
+    #         file_path = (
+    #             self.current_working_directory
+    #             / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
+    #         )
+
+    #         if file_path.is_dir():
+    #             metadata_path = (
+    #                 self.current_working_directory
+    #                 / f".{hashlib.sha256(file_name.encode('utf-8')).hexdigest()}"
+    #             )
+    #             if not metadata_path.exists():
+    #                 print(f"Error: Metadata for directory '{file_name}' does not exist.")
+    #                 return
+    #             file_path = metadata_path
+
+    #         if not file_path.is_file():
+    #             print(f"Error: '{file_name}' is not a valid file.")
+    #             return
+
+    #         try:
+    #             file_key = bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
+    #             file = File.get_file(file_path, file_key)
+    #             print(file.permission.value)
+    #         except Exception as e:
+    #             print(f"Error reading file: {e}")
 
     @requires_admin
     def do_create_user(self, arg):
@@ -589,10 +604,32 @@ class SecureFS(cmd.Cmd):
             return
         username, password = credentials
 
-        created_user = create_user(username, password, is_admin=False)
+        encrypted_name = hashlib.sha256(username.encode()).hexdigest()
+        if (USERS_DIR / encrypted_name).exists():
+            print(f"Error: User '{username}' already exists.")
+            return
+
+        created_user, master_key = User.create(username, password)
         if created_user is None:
             print("Error: Username already exists.")
             return
+
+        add_user_to_admin(self.current_user, created_user, master_key)
+
+        all_group_info = self.current_user.group_keys.get("all")
+
+        create_user_directory(created_user)
+
+        if all_group_info:
+            group_path = Path(all_group_info["id"])
+            group_key = bytes.fromhex(all_group_info["key"])
+            all_group_obj = Group.get_group(group_path, group_key)
+
+            if all_group_obj:
+                add_user_to_group(created_user, all_group_obj)
+                add_group_to_user(created_user, all_group_obj, all_group_info["key"])
+        else:
+            print(f"Warning: Group 'all' not found.")
 
         print(f"User created: {username} ")
 
@@ -605,92 +642,91 @@ class SecureFS(cmd.Cmd):
         if group_name is None:
             return
 
-        created = create_group(group_name)
-        if created is None:
+        if group_name in self.current_user.group_keys:
+            print(f"Error: Group '{group_name}' already exists.")
             return
+
+        group, group_master_key = Group.create(group_name)
+        add_group_to_user(self.current_user, group, group_master_key)
+
         print(f"Group created: {group_name}")
 
     @requires_admin
     def do_add_user_to_group(self, arg):
-        """
-        Usage: add_user_to_group
-        """
         group_name = prompt_required_text("group name")
-        if group_name is None:
-            return
-
         username = prompt_required_text("username")
-        if username is None:
+        if not group_name or not username:
             return
 
-        user_data = load_user(username)
-        if user_data is None:
-            print(f"Error: User '{username}' does not exist.")
+        group_info = self.current_user.group_keys.get(group_name)
+        user_metadata = self.current_user.user_keys.get(username)
+
+        if not group_info or not user_metadata:
+            print("Error: Missing group or user metadata.")
             return
 
-        group_data = load_group(group_name)
-        if group_data is None:
-            print(f"Error: Group '{group_name}' does not exist.")
+        group_obj = Group.get_group(
+            Path(group_info["id"]), bytes.fromhex(group_info["key"])
+        )
+
+        user_path = USERS_DIR / user_metadata["id"]
+        user_key = bytes.fromhex(user_metadata["key"])
+        target_user = self.current_user.get_user(user_path, user_key)
+
+        if not group_obj or not target_user:
+            print("Error: Could not load the records.")
             return
 
-        added_to_group = add_user_to_group(group_name, username)
-        if not added_to_group:
-            print(f"Failed to add user '{username}' to group '{group_name}'.")
-            return
+        add_user_to_group(target_user[0], group_obj)
+        add_group_to_user(target_user[0], group_obj, group_info["key"])
 
-        print(f"User '{username}' added to group '{group_name}'.")
+        print(f"Success: {username} added to {group_name}.")
 
     @requires_admin
     def do_remove_user_from_group(self, arg):
-        """
-        Usage: remove_user_from_group
-        """
+        """Usage: remove_user_from_group"""
         group_name = prompt_required_text("group name")
-        if group_name is None:
+        if not group_name:
             return
 
         username = prompt_required_text("username")
-        if username is None:
+        if not username:
             return
 
-        user_data = load_user(username)
-        if user_data is None:
+        group_info = self.current_user.group_keys.get(group_name)
+        user_metadata = self.current_user.user_keys.get(username)
+
+        if not group_info:
+            print(f"Error: Group '{group_name}' does not exist.")
+            return
+        if not user_metadata:
             print(f"Error: User '{username}' does not exist.")
             return
 
-        group_data = load_group(group_name)
-        if group_data is None:
-            print(f"Error: Group '{group_name}' does not exist.")
+        user_file_path = USERS_DIR / user_metadata["id"]
+        user_key_bytes = bytes.fromhex(user_metadata["key"])
+        target_user = self.current_user.get_user(user_file_path, user_key_bytes)
+
+        if target_user:
+            if group_name in target_user.group_keys:
+                del target_user.group_keys[group_name]
+                target_user.save()
+            else:
+                print(f"Warning: Group '{group_name}' wasn't in {username}'s key list.")
+        else:
+            print(f"Error: Could not access record for user '{username}'.")
             return
 
-        members = group_data.get("members", {})
-        if username not in members:
-            print(f"User '{username}' is not a member of group '{group_name}'.")
-            return
+        group_path = Path(group_info["id"])
+        group_key = bytes.fromhex(group_info["key"])
+        group_obj = Group.get_group(group_path, group_key)
 
-        removed = remove_user_from_group(group_name, username)
-        if not removed:
-            print(f"Failed to remove user '{username}' from group '{group_name}'.")
-            return
-
-        print(f"User '{username}' removed from group '{group_name}'.")
-
-    @requires_admin
-    def do_list_users(self, arg):
-        """
-        Usage: list_users
-        """
-        print("Users:")
-        admin = get_admin_record()
-        if not admin:
-            return
-
-        keys = getattr(admin, "user_keys", {}) or {}
-        for uname in keys:
-            user = load_user(uname)
-            if user is None:
-                continue
-            print(f" - {user.get('username')}")
+        if username in group_obj.members:
+            del group_obj.members[username]
+            group_obj.save(group_key)
+            print(f"User '{username}' successfully removed from group '{group_name}'.")
+        else:
+            print(f"User '{username}' was not a member of group '{group_name}'.")
 
     def do_exit(self, arg):
         return True

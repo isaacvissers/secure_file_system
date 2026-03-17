@@ -13,10 +13,12 @@ from backend.auth import (
     get_admin_key,
     get_admin_record,
 )
-from backend.group_utils import create_group, load_group
+from backend.group_utils import add_group_to_user, add_user_to_group, load_group
+from models.group import Group
+from models.user import AdminUser
 
 
-def ensure_admin_user(username: str, password: str, reset_password: bool = False):
+def ensure_admin_user(username: str, password: str):
     """
     Ensure an admin user exists. If `reset_password` is True and an admin
     record exists, remove it and recreate the admin user.
@@ -27,18 +29,8 @@ def ensure_admin_user(username: str, password: str, reset_password: bool = False
     admin_path = _user_file_path(get_admin_key())
 
     if not admin_path.exists():
-        # No admin file, create one
-        new_user = create_user(username, password, is_admin=True)
-        return new_user, "created"
-
-    if reset_password:
-        # Remove old admin record
-        try:
-            admin_path.unlink()
-        except Exception as e:
-            print(f"Warning: could not delete old admin record: {e}")
-        new_user = create_user(username, password, is_admin=True)
-        return new_user, "updated"
+        admin_user, _ = AdminUser.create(username, password)
+        return admin_user, "created"
 
     # Admin file exists
     admin = get_admin_record()
@@ -54,11 +46,11 @@ def ensure_group(name: str):
     if existing is not None:
         return existing, "exists"
 
-    created = create_group(name)
-    if created is None:
+    all_group, master_key = Group.create("all")
+    if all_group is None:
         return None, "missing"
 
-    return created, "created"
+    return all_group, master_key, "created"
 
 
 def main() -> None:
@@ -70,13 +62,14 @@ def main() -> None:
     else:
         print("Admin user record missing or corrupted.")
 
-    _, group_status = ensure_group("all")
+    all_group, group_master_key, group_status = ensure_group("all")
     if group_status == "created":
         print("Group created: all")
     elif group_status == "exists":
         print("Group already exists: all")
     else:
         print("Group record missing or could not be created: all")
+    add_group_to_user(admin_data, all_group, group_master_key)
 
 
 if __name__ == "__main__":
