@@ -74,7 +74,7 @@ def test_cat_errors_for_missing_file(tmp_path, monkeypatch, capsys):
 
 
 def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
-    """cat reports a read error when the session does not have the file key."""
+    """cat reports a permission error when the session does not have the file key."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file = File.create(
         shell.current_working_directory,
@@ -87,7 +87,7 @@ def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
     shell.do_cat("broken")
 
     captured = capsys.readouterr()
-    assert "Error reading file" in captured.out
+    assert "You do not have permission to access" in captured.out
 
 
 def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, capsys):
@@ -104,7 +104,7 @@ def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, c
 
 
 def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
-    """cat reports read errors when target file is not a valid encrypted payload."""
+    """cat reports permission errors before attempting to parse unreadable files."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
     broken_file = encrypted_path(shell.current_working_directory, "broken")
     broken_file.write_text("{not-json", encoding="utf-8")
@@ -112,7 +112,7 @@ def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
     shell.do_cat("broken")
 
     captured = capsys.readouterr()
-    assert "Error reading file" in captured.out
+    assert "You do not have permission to access" in captured.out
 
 
 def test_cat_prints_blank_line_for_empty_body(tmp_path, monkeypatch, capsys):
