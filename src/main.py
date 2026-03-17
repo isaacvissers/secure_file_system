@@ -30,8 +30,6 @@ from models.file import File, Permission
 from models.group import Group
 from models.user import ADMIN, USERS_DIR, AdminUser, User
 
-# from models.group import Group
-
 
 class SecureFS(cmd.Cmd):
     def __init__(self):
@@ -553,46 +551,41 @@ class SecureFS(cmd.Cmd):
                     group_obj = Group.get_group(Path(group_id), group_key)
 
                     if group_obj:
-                        # 3. Call our updated helper to add the file and save the group
                         add_file_to_group(group_obj, group_key, file, file_key)
                     else:
                         print(f"Error: Could not access group record for {group_name}")
 
-    #     @requires_login
-    #     def do_get_permissions(self, arg):
-    #         """
-    #         Usage: get_permissions <file_name>
-    #         """
-    #         if not arg.strip():
-    #             print("Error: File name is required.")
-    #             return
-
-    #         file_name = arg.strip()
-    #         file_path = (
-    #             self.current_working_directory
-    #             / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
-    #         )
-
-    #         if file_path.is_dir():
-    #             metadata_path = (
-    #                 self.current_working_directory
-    #                 / f".{hashlib.sha256(file_name.encode('utf-8')).hexdigest()}"
-    #             )
-    #             if not metadata_path.exists():
-    #                 print(f"Error: Metadata for directory '{file_name}' does not exist.")
-    #                 return
-    #             file_path = metadata_path
-
-    #         if not file_path.is_file():
-    #             print(f"Error: '{file_name}' is not a valid file.")
-    #             return
-
-    #         try:
-    #             file_key = bytes.fromhex(self.current_user["file_keys"].get(str(file_path)))
-    #             file = File.get_file(file_path, file_key)
-    #             print(file.permission.value)
-    #         except Exception as e:
-    #             print(f"Error reading file: {e}")
+    @requires_login
+    def do_get_permissions(self, arg):
+        """
+        Usage: get_permissions <file_name>
+        """
+        if not arg.strip():
+            print("Error: File name is required.")
+            return
+        file_name = arg.strip()
+        file_path = (
+            self.current_working_directory
+            / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
+        )
+        if file_path.is_dir():
+            metadata_path = (
+                self.current_working_directory
+                / f".{hashlib.sha256(file_name.encode('utf-8')).hexdigest()}"
+            )
+            if not metadata_path.exists():
+                print(f"Error: Metadata for directory '{file_name}' does not exist.")
+                return
+            file_path = metadata_path
+        if not file_path.is_file():
+            print(f"Error: '{file_name}' is not a valid file.")
+            return
+        try:
+            file_key = bytes.fromhex(self.current_user.file_keys.get(str(file_path)))
+            file = File.get_file(file_path, file_key)
+            print(file.permission.value)
+        except Exception as e:
+            print(f"Error reading file: {e}")
 
     @requires_admin
     def do_create_user(self, arg):
