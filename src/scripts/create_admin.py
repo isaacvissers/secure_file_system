@@ -7,7 +7,7 @@ SRC_DIR = CURRENT_DIR.parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from backend.auth import ADMIN, _user_file_path, get_admin_key
+from backend.auth import ADMIN, STORAGE_DIR, _user_file_path, get_admin_key
 from backend.group_utils import add_group_to_user
 from models.group import GROUPS_DIR, Group
 from models.user import AdminUser
@@ -47,6 +47,8 @@ def ensure_group(name: str):
 
 
 def main() -> None:
+    print(f"Storage directory: {STORAGE_DIR}")
+
     admin_user, status = ensure_admin_user(ADMIN, ADMIN)
     if status in {"created", "updated"}:
         print(f"Admin user {status}: {ADMIN}")

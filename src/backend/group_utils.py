@@ -3,11 +3,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import backend.auth as auth
+from backend.storage_paths import get_storage_dir
 from models.group import Group
 from models.user import AdminUser, User
 
-SRC_DIR = Path(__file__).resolve().parents[1]
-GROUPS_DIR = SRC_DIR / "storage/.groups"
+GROUPS_DIR = get_storage_dir() / ".groups"
 GROUPS_DIR.mkdir(parents=True, exist_ok=True)
 
 GroupsDict = Dict[str, Any]

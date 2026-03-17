@@ -5,14 +5,15 @@ from typing import Any, Dict, Optional, Tuple
 
 # from backend.cryptography_utils import *
 from backend.group_utils import add_user_to_group
+from backend.storage_paths import get_storage_dir
 from models.directory import Directory
 from models.user import AdminUser, User
 
-SRC_DIR = Path(__file__).resolve().parents[1]
-USERS_DIR = SRC_DIR / "storage/.users"
+STORAGE_DIR = get_storage_dir()
+USERS_DIR = STORAGE_DIR / ".users"
 USERS_DIR.mkdir(parents=True, exist_ok=True)
 
-FILES_DIR = SRC_DIR / "storage/files"
+FILES_DIR = STORAGE_DIR / "files"
 FILES_DIR.mkdir(parents=True, exist_ok=True)
 
 SALT_BYTES = 16
