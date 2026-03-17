@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import backend.auth as auth
 from backend.storage_paths import get_storage_dir
 from models.group import Group
 from models.user import AdminUser, User

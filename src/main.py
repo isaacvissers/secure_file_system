@@ -402,7 +402,12 @@ class SecureFS(cmd.Cmd):
         try:
             # TODO: decrypt body contents first, modify the decrypted content, then re-encrypt and write back to file instead of just writing raw output
             if not file_path.exists():
-                # TODO I think we need to rethink this part too
+                if not self.current_working_directory.is_relative_to(
+                    FILES_DIR
+                    / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
+                ):
+                    print("Error: Cannot create files outside of your home directory.")
+                    return
                 logical_name = file_name
                 file = File.create(
                     self.current_working_directory,
@@ -413,9 +418,16 @@ class SecureFS(cmd.Cmd):
                 self._refresh_current_user(
                     {str(file.path): file.encrypted_file_key.hex()}
                 )
+            elif not file_path.is_file():
+                print(f"Error: '{file_name}' is not a valid file.")
+                return
             else:
+                file_key_str = self.current_user.file_keys.get(str(file_path))
+                if not file_key_str:
+                    print("Error: You do not have permission to modify this file.")
+                    return
                 file_key = bytes.fromhex(
-                    self.current_user.file_keys.get(str(file_path))
+                    file_key_str
                 )
                 file = File.get_file(
                     file_path,
@@ -437,6 +449,13 @@ class SecureFS(cmd.Cmd):
         tokens = shlex.split(arg)
         if len(tokens) != 2:
             print("Error: Invalid syntax. Usage: mv <source> <destination>")
+            return
+        
+        if not self.current_working_directory.is_relative_to(
+            FILES_DIR
+            / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
+        ):
+            print("Error: Cannot rename files outside of your home directory.")
             return
 
         # rename the file, must be within same directory

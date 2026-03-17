@@ -7,7 +7,11 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from models.user import User
+from backend.storage_paths import get_storage_dir
+from models.user import AdminUser, User
+
+FILES_DIR = get_storage_dir() / "files"
+FILES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class Permission(Enum):
@@ -37,8 +41,6 @@ class File:
         is_metadata: bool = False,
     ) -> "File":
         """Create the file on disk as <name> and return a File instance."""
-        # TODO: make sure we aren't creating files outside of the current user's directory
-        # Maybe make sure you are the owner of the parent directory?
         encrypted_name = hashlib.sha256(name.encode("utf-8")).hexdigest()
         if is_metadata:
             encrypted_name = f".{encrypted_name}"
