@@ -285,7 +285,25 @@ class SecureFS(cmd.Cmd):
         if not new_path.is_dir():
             print(f"Error: '{directory_name}' is not a valid directory.")
             return
-
+        
+        file_key_hex = self.current_user.file_keys.get(str(new_path.parent / f".{new_path.name}"))
+        if not file_key_hex:
+            for group_name, group_info in self.current_user.group_keys.items():
+                group_key = bytes.fromhex(group_info["key"])
+                group_id = group_info["id"]
+                group_obj = Group.get_group(Path(group_id), group_key)
+                if str(new_path.parent / f".{new_path.name}") in group_obj.file_access.keys():
+                    file_key_hex = group_obj.file_access[str(new_path.parent / f".{new_path.name}")]["key"]
+                    break
+        if file_key_hex is None:
+            print(f"Error: You do not have permission to access '{directory_name}'.")
+            return
+        else:
+            try:
+                File.get_file((self.current_working_directory / f".{hashlib.sha256(directory_name.encode('utf-8')).hexdigest()}"), bytes.fromhex(file_key_hex))
+            except Exception as e:
+                print(f"Error: {e}")
+                return
         self.current_working_directory = new_path
         self._update_prompt()
 
