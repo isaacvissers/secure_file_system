@@ -93,7 +93,6 @@ def get_admin_record() -> Optional[AdminUser]:
         return AdminUser(**data)
 
 
-
 # --------------------
 # User Storage
 # --------------------
@@ -130,7 +129,6 @@ def load_user(username: str) -> Optional[UserDict]:
         if data.get("username") == username:
             return data
     return None
-
 
 
 def create_user_directory(user: User) -> Path:

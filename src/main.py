@@ -5,24 +5,13 @@ import shlex
 from pathlib import Path
 
 # from backend.auth import *
-from backend.auth import (
-    FILES_DIR,
-    add_user_to_admin,
-    create_user_directory,
-    requires_admin,
-    requires_logged_out,
-    requires_login,
-)
-
+from backend.auth import (FILES_DIR, add_user_to_admin, create_user_directory,
+                          requires_admin, requires_logged_out, requires_login)
 # from backend.cryptography_utils import *
 # from backend.file_utils import *
-from backend.file_utils import (
-    add_file_to_group,
-    check_user_file_integrities,
-    remove_file_tracking_for_user,
-    try_decrypt_directory,
-    try_decrypt_file,
-)
+from backend.file_utils import (add_file_to_group, check_user_file_integrities,
+                                remove_file_tracking_for_user,
+                                try_decrypt_directory, try_decrypt_file)
 from backend.group_utils import add_group_to_user, add_user_to_group
 from cli_utils import *
 from models.directory import Directory

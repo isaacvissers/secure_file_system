@@ -13,7 +13,9 @@ def test_create_user_key_and_admin_key():
 
 def test_save_and_load_user_without_admin_index(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-    monkeypatch.setattr(auth, "_user_file_path", lambda user_key: tmp_path / f"{user_key}.json")
+    monkeypatch.setattr(
+        auth, "_user_file_path", lambda user_key: tmp_path / f"{user_key}.json"
+    )
 
     user = {"username": "bob", "file_keys": {}, "group_keys": {}}
     key = auth.create_user_key("bob", "pw")
@@ -26,7 +28,9 @@ def test_save_and_load_user_without_admin_index(tmp_path, monkeypatch):
 
 def test_get_admin_record_missing_and_present(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-    monkeypatch.setattr(auth, "_user_file_path", lambda user_key: tmp_path / f"{user_key}.json")
+    monkeypatch.setattr(
+        auth, "_user_file_path", lambda user_key: tmp_path / f"{user_key}.json"
+    )
 
     assert auth.get_admin_record() is None
 
@@ -50,7 +54,9 @@ def test_get_admin_record_missing_and_present(tmp_path, monkeypatch):
 
 def test_load_user_uses_admin_index_when_available(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-    monkeypatch.setattr(auth, "_user_file_path", lambda user_key: tmp_path / f"{user_key}.json")
+    monkeypatch.setattr(
+        auth, "_user_file_path", lambda user_key: tmp_path / f"{user_key}.json"
+    )
 
     user_key = auth.create_user_key("erin", "pw")
     with open(tmp_path / f"{user_key}.json", "w", encoding="utf-8") as f:
@@ -76,7 +82,9 @@ def test_load_user_uses_admin_index_when_available(tmp_path, monkeypatch):
 
 def test_resolve_user_with_admin_index(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "USERS_DIR", tmp_path)
-    monkeypatch.setattr(auth, "_user_file_path", lambda user_key: tmp_path / f"{user_key}.json")
+    monkeypatch.setattr(
+        auth, "_user_file_path", lambda user_key: tmp_path / f"{user_key}.json"
+    )
 
     user_key = auth.create_user_key("zara", "pw")
     with open(tmp_path / f"{user_key}.json", "w", encoding="utf-8") as f:
@@ -127,7 +135,9 @@ def test_create_user_directory_calls_directory_create(tmp_path, monkeypatch):
 
 def test_add_user_to_admin_updates_admin_mapping(tmp_path):
     admin_path = tmp_path / "admin.json"
-    admin = AdminUser(username="admin", path=str(admin_path), user_keys={}, group_keys={})
+    admin = AdminUser(
+        username="admin", path=str(admin_path), user_keys={}, group_keys={}
+    )
     admin.save()
 
     target_path = tmp_path / "target-user-file"

@@ -92,6 +92,7 @@ def _normalize_file_key(file_key: Any) -> str:
     # Fallback to generic string representation
     return str(file_key)
 
+
 def add_file_to_user(file_name: Any, user: User, file_key: Any = None) -> bool:
     """
     Normalize `file_key` and add it to the user's `file_keys` list.

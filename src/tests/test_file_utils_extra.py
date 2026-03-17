@@ -1,17 +1,16 @@
 import hashlib
 import json
 
-from tests.tamper_helpers import flip_last_gcm_tag_nibble, flip_last_hash_nibble
+from tests.tamper_helpers import (flip_last_gcm_tag_nibble,
+                                  flip_last_hash_nibble)
 
 
 def test_get_user_file_keys_and_add_file_to_group_propagation(tmp_path, monkeypatch):
     """Adding a file to a user should store the normalized key and propagate to groups."""
     import backend.auth as auth
-    from backend.file_utils import (
-        add_file_to_user,
-        add_file_to_user_and_groups,
-        get_user_file_keys,
-    )
+    from backend.file_utils import (add_file_to_user,
+                                    add_file_to_user_and_groups,
+                                    get_user_file_keys)
     from backend.group_utils import add_user_to_group, create_group, load_group
 
     users_dir = tmp_path / "users"
@@ -140,7 +139,8 @@ def test_add_file_to_user_and_groups_accepts_hex_string(tmp_path, monkeypatch):
     """add_file_to_user_and_groups should accept a hex string file key and add to user and groups."""
     import backend.auth as auth
     import backend.group_utils as group_utils
-    from backend.file_utils import add_file_to_user_and_groups, get_user_file_keys
+    from backend.file_utils import (add_file_to_user_and_groups,
+                                    get_user_file_keys)
 
     users_dir = tmp_path / "users"
     files_dir = tmp_path / "files"
