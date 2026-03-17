@@ -49,7 +49,7 @@ def get_specific_group_for_user(
 
 def add_user_to_group(user, group: Group) -> bool:
     """Add a user to the group's member list."""
-    group.members[user.username] = str(user.path)
+    group.members[user.get_encrypted_name()] = user.username
     group.save()
     return True
 
@@ -68,8 +68,8 @@ def add_group_to_user(user: User | AdminUser, group: Group, master_key: str) -> 
 
 def remove_user_from_group(user: User | AdminUser, group: Group) -> bool:
     """Remove a user's access from the group's member list."""
-    if user.username in group.members:
-        del group.members[user.username]
+    if user.get_encrypted_name() in group.members:
+        del group.members[user.get_encrypted_name()]
         group.save()
         return True
     else:

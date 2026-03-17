@@ -81,6 +81,10 @@ class User:
             (password + self.auth_salt).encode("utf-8")
         ).hexdigest()
         return attempt == self.auth_verifier
+    
+    def get_encrypted_name(self) -> str:
+        """Return the encrypted name of the user for storage purposes."""
+        return hashlib.sha256(self.username.encode("utf-8")).hexdigest()
 
 
 @dataclass

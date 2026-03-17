@@ -55,6 +55,20 @@ class SecureFS(cmd.Cmd):
             print(
                 f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
             )
+        # Load all of the users groups and try to resolve users directories that way
+        for group_name, group_info in self.current_user.group_keys.items():
+            group_key = bytes.fromhex(group_info["key"])
+            group_id = group_info["id"]
+            group_obj = Group.get_group(Path(group_id), group_key)
+            if str(metadata_path) in group_obj.file_access.keys():
+                return group_obj.file_access[str(metadata_path)]["name"]
+            if parent_dir == FILES_DIR:
+                if group_name.lower() == "all":
+                    continue
+                if group_obj and encrypted_dir_name in group_obj.members:
+                    return group_obj.members[encrypted_dir_name]
+        if parent_dir == FILES_DIR:
+            return None
         return encrypted_dir_name
 
     def _build_displayed_path(self):
@@ -71,7 +85,8 @@ class SecureFS(cmd.Cmd):
 
         for part in relative_path.parts:
             displayed_part = self._resolve_directory_display_name(base_dir, part)
-            displayed_path += f"/{displayed_part}"
+            if displayed_part:
+                displayed_path += f"/{displayed_part}"
 
             base_dir = base_dir / part
 
@@ -290,7 +305,8 @@ class SecureFS(cmd.Cmd):
                         entry.name,
                         show_decrypt_error=False,
                     )
-                    print(f"{display_name}/")
+                    if display_name:
+                        print(f"{display_name}/")
             elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
                 continue
             else:
@@ -712,6 +728,7 @@ class SecureFS(cmd.Cmd):
     @requires_admin
     def do_remove_user_from_group(self, arg):
         """Usage: remove_user_from_group"""
+        # TODO this is broken. Not sure why but thats a later problem
         group_name = prompt_required_text("group name")
         if not group_name:
             return
@@ -748,12 +765,12 @@ class SecureFS(cmd.Cmd):
         group_key = bytes.fromhex(group_info["key"])
         group_obj = Group.get_group(group_path, group_key)
 
-        if username in group_obj.members:
-            del group_obj.members[username]
+        if target_user.get_encrypted_name() in group_obj.members:
+            del group_obj.members[target_user.get_encrypted_name()]
             group_obj.save(group_key)
-            print(f"User '{username}' successfully removed from group '{group_name}'.")
+            print(f"User '{target_user.username}' successfully removed from group '{group_name}'.")
         else:
-            print(f"User '{username}' was not a member of group '{group_name}'.")
+            print(f"User '{target_user.username}' was not a member of group '{group_name}'.")
 
     def do_exit(self, arg):
         return True
