@@ -4,14 +4,22 @@ import json
 import shlex
 from pathlib import Path
 
-# from backend.auth import *
-from backend.auth import (FILES_DIR, add_user_to_admin, create_user_directory,
-                          requires_admin, requires_logged_out, requires_login)
-# from backend.cryptography_utils import *
-# from backend.file_utils import *
-from backend.file_utils import (add_file_to_group, check_user_file_integrities,
-                                remove_file_tracking_for_user,
-                                try_decrypt_directory, try_decrypt_file)
+from backend.auth import (
+    FILES_DIR,
+    add_user_to_admin,
+    create_user_directory,
+    requires_admin,
+    requires_logged_out,
+    requires_login,
+)
+from backend.file_utils import (
+    add_file_to_group,
+    check_user_file_integrities,
+    remove_file_tracking_for_user,
+    sync_file_info_for_user,
+    try_decrypt_directory,
+    try_decrypt_file,
+)
 from backend.group_utils import add_group_to_user, add_user_to_group
 from cli_utils import *
 from models.directory import Directory
@@ -406,12 +414,16 @@ class SecureFS(cmd.Cmd):
                     {str(file.path): file.encrypted_file_key.hex()}
                 )
             else:
+                file_key = bytes.fromhex(
+                    self.current_user.file_keys.get(str(file_path))
+                )
                 file = File.get_file(
                     file_path,
-                    bytes.fromhex(self.current_user.file_keys.get(str(file_path))),
+                    file_key,
                 )
                 file.body = file.body + output if append_mode else output
                 file.save()
+                sync_file_info_for_user(self.current_user, file)
                 self._refresh_current_user()
 
         except Exception as e:
@@ -527,6 +539,7 @@ class SecureFS(cmd.Cmd):
             file = File.get_file(target_path, file_key)
             file.permission = Permission(permissions)
             file.save()
+            sync_file_info_for_user(self.current_user, file)
             if permissions == Permission.GROUP.value:
                 file_key = file.encrypted_file_key
                 for group_name, group_info in self.current_user.group_keys.items():

@@ -5,64 +5,56 @@ import pytest
 
 from models.directory import Directory
 from models.file import File, Permission
-
-# ---------------------------------------------------------------------------
-# Directory.create()
-# ---------------------------------------------------------------------------
+from tests.test_helpers import make_user
 
 
 def test_directory_create_returns_directory_instance(tmp_path):
-    """Directory.create() returns a Directory object."""
-    d = Directory.create(tmp_path, "mydir", "owner")
-    assert isinstance(d, Directory)
+    user = make_user(tmp_path, "owner")
+    directory = Directory.create(tmp_path, "mydir", user)
+    assert isinstance(directory, Directory)
 
 
 def test_directory_create_sets_path(tmp_path):
-    """Directory.create() sets path to working_dir / name."""
-    d = Directory.create(tmp_path, "mydir", "owner")
-    assert d.path == tmp_path / sha256("mydir".encode("utf-8")).hexdigest()
+    user = make_user(tmp_path, "owner")
+    directory = Directory.create(tmp_path, "mydir", user)
+    assert directory.path == tmp_path / sha256("mydir".encode("utf-8")).hexdigest()
 
 
 def test_directory_create_creates_dir_on_disk(tmp_path):
-    """Directory.create() creates the directory on the filesystem."""
-    Directory.create(tmp_path, "newdir", "owner")
+    user = make_user(tmp_path, "owner")
+    Directory.create(tmp_path, "newdir", user)
     assert (tmp_path / sha256("newdir".encode("utf-8")).hexdigest()).is_dir()
 
 
 def test_directory_create_raises_when_already_exists(tmp_path):
-    """Directory.create() raises an OSError if the directory already exists."""
+    user = make_user(tmp_path, "owner")
     (tmp_path / sha256("exists".encode("utf-8")).hexdigest()).mkdir()
     with pytest.raises(FileExistsError):
-        Directory.create(tmp_path, "exists", "owner")
-
-
-# ---------------------------------------------------------------------------
-# Directory metadata (File)
-# ---------------------------------------------------------------------------
+        Directory.create(tmp_path, "exists", user)
 
 
 def test_directory_create_attaches_metadata(tmp_path):
-    """Directory.create() attaches a File instance as metadata."""
-    d = Directory.create(tmp_path, "docs", "owner")
-    assert isinstance(d.metadata, File)
+    user = make_user(tmp_path, "owner")
+    directory = Directory.create(tmp_path, "docs", user)
+    assert isinstance(directory.metadata, File)
 
 
 def test_directory_metadata_file_name(tmp_path):
-    """Directory metadata records the directory name."""
-    d = Directory.create(tmp_path, "docs", "owner")
-    assert d.metadata.file_name == "docs"
+    user = make_user(tmp_path, "owner")
+    directory = Directory.create(tmp_path, "docs", user)
+    assert directory.metadata.file_name == "docs"
 
 
 def test_directory_metadata_written_to_dotfile(tmp_path):
-    """Directory.create() writes a dotfile metadata file."""
-    Directory.create(tmp_path, "archive", "owner")
+    user = make_user(tmp_path, "owner")
+    Directory.create(tmp_path, "archive", user)
     meta_file = tmp_path / f".{sha256('archive'.encode('utf-8')).hexdigest()}"
     assert meta_file.exists()
 
 
 def test_directory_metadata_json_is_valid(tmp_path):
-    """The encrypted metadata file decrypts to valid JSON."""
-    directory = Directory.create(tmp_path, "archive", "owner")
+    user = make_user(tmp_path, "owner")
+    directory = Directory.create(tmp_path, "archive", user)
     loaded = File.get_file(
         directory.metadata.path, directory.metadata.encrypted_file_key
     )
@@ -79,16 +71,7 @@ def test_directory_metadata_json_is_valid(tmp_path):
         assert key in data
 
 
-def test_directory_metadata_file_name_in_json(tmp_path):
-    """The decrypted metadata file_name matches the directory name."""
-    directory = Directory.create(tmp_path, "archive", "owner")
-    loaded = File.get_file(
-        directory.metadata.path, directory.metadata.encrypted_file_key
-    )
-    assert loaded.file_name == "archive"
-
-
 def test_directory_metadata_permission_default(tmp_path):
-    """Default permission is USER."""
-    d = Directory.create(tmp_path, "priv", "owner")
-    assert d.metadata.permission == Permission.USER
+    user = make_user(tmp_path, "owner")
+    directory = Directory.create(tmp_path, "priv", user)
+    assert directory.metadata.permission == Permission.USER

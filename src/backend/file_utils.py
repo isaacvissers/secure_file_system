@@ -7,7 +7,6 @@ from typing import Any
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from backend.auth import get_admin_record, load_user, save_user
 from models.file import File
 from models.group import Group
 from models.user import User
@@ -175,33 +174,21 @@ def _read_integrity_hashes(path: Path) -> tuple[str, str] | None:
     return hashlib.sha256(content[:-64]).hexdigest(), stored
 
 
-def sync_file_info_for_user(
-    username: str,
-    tracked_path: str | Path,
-    file_key: Any = None,
-) -> bool:
+def sync_file_info_for_user(user: User, file: File) -> bool:
     """Refresh a single `file_info` entry from on-disk encrypted content."""
     # Silent lookup: File.save may call this in test fixtures that intentionally
     # don't create an admin record, and this should not print to stdout.
-    admin = get_admin_record()
-    if not admin:
-        return False
-
-    user_key = getattr(admin, "user_keys", {}).get(username)
-    if not user_key:
-        return False
-
-    user = load_user(username)
-    if not user:
-        return False
-
     normalized_file_info, _ = _normalize_file_info_map(user.file_info)
     user.file_info = normalized_file_info
 
-    path_obj = tracked_path if isinstance(tracked_path, Path) else Path(tracked_path)
+    path_obj = file.path
     path_key = str(path_obj)
 
-    file_key_hex = _normalize_file_key(file_key) if file_key is not None else None
+    file_key_hex = (
+        _normalize_file_key(file.encrypted_file_key)
+        if file.encrypted_file_key is not None
+        else None
+    )
     if not file_key_hex:
         file_key_hex = (user.file_keys or {}).get(path_key)
     if not file_key_hex:
@@ -214,7 +201,7 @@ def sync_file_info_for_user(
         return False
 
     user.file_info[path_key] = file.file_name
-    save_user(user_key, user)
+    user.save()
     return True
 
 

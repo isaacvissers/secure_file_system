@@ -79,56 +79,8 @@ def _user_file_path(user_key: str) -> Path:
 
 
 # --------------------
-# Admin Utilities
-# --------------------
-
-
-def get_admin_record() -> Optional[AdminUser]:
-    """Return the AdminUser object if exists."""
-    path = _user_file_path(get_admin_key())
-    if not path.exists():
-        return None
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-        return AdminUser(**data)
-
-
-# --------------------
 # User Storage
 # --------------------
-
-
-def save_user(user_key: str, user_dict: UserDict) -> None:
-    """Save user JSON to disk (future: encrypt here)."""
-    path = _user_file_path(user_key)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(user_dict, f)
-
-
-def load_user(username: str) -> Optional[UserDict]:
-    """Load user by username, using admin index first, then fallback scan."""
-    admin = get_admin_record()
-    if admin and getattr(admin, "user_keys", None):
-        user_key = admin.user_keys.get(username)
-        if user_key:
-            path = _user_file_path(user_key)
-            if path.exists():
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        return json.load(f)
-                except Exception:
-                    return None
-
-    # fallback: scan all users
-    for f in USERS_DIR.glob("*.json"):
-        try:
-            with open(f, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-        except Exception:
-            continue
-        if data.get("username") == username:
-            return data
-    return None
 
 
 def create_user_directory(user: User) -> Path:
@@ -139,23 +91,6 @@ def create_user_directory(user: User) -> Path:
 # --------------------
 # User Helpers
 # --------------------
-
-
-def _resolve_user(
-    admin: AdminUser, username: str
-) -> Tuple[Optional[str], Optional[UserDict]]:
-    """Return (user_key, user_dict). Print errors if missing."""
-    user_key = admin.user_keys.get(username)
-    if not user_key:
-        print(f"User '{username}' not found.")
-        return None, None
-
-    user = load_user(username)
-    if not user:
-        print("User file not found.")
-        return None, None
-
-    return user_key, user
 
 
 def add_user_to_admin(admin: AdminUser, target_user: User, user_master_key: str):

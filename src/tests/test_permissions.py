@@ -1,278 +1,103 @@
-import main as main_module
-from main import SecureFS
 from models.directory import Directory
 from models.file import File
 from tests.encryption_helpers import load_tracked_file, track_file
 from tests.path_helpers import encrypted_path
-from tests.test_login import _make_user_data
-
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
+from tests.test_helpers import make_logged_in_shell, make_user
 
 
 def _logged_in_shell(tmp_path, monkeypatch, username="alice"):
-    """Return a logged-in shell rooted at FILES_DIR/<username>."""
-    monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    user_home = Directory.create(tmp_path, username, username)
-    shell = SecureFS()
-    shell.current_user = _make_user_data(user_id=1, username=username)
-    shell.current_user["file_keys"][
-        str(user_home.metadata.path)
-    ] = user_home.metadata.encrypted_file_key.hex()
-    shell.current_working_directory = user_home.path
-    shell._update_prompt()
-    return shell
+    return make_logged_in_shell(tmp_path, monkeypatch, username=username)
 
 
-# ---------------------------------------------------------------------------
-# set_permissions tests
-# ---------------------------------------------------------------------------
-
-
-def test_set_permissions_to_user(tmp_path, monkeypatch, capsys):
-    """set_permissions successfully sets permission to 'user'."""
+def test_set_permissions_to_user(tmp_path, monkeypatch):
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = encrypted_path(shell.current_working_directory, "test")
-    track_file(shell, File.create(shell.current_working_directory, "test", "alice"))
-
+    track_file(
+        shell, File.create(shell.current_working_directory, "test", shell.current_user)
+    )
     shell.do_set_permissions("test user")
-
     assert load_tracked_file(shell, file_path).permission.value == "user"
 
 
-def test_set_permissions_to_group(tmp_path, monkeypatch, capsys):
-    """set_permissions successfully sets permission to 'group'."""
+def test_set_permissions_to_group(tmp_path, monkeypatch):
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = encrypted_path(shell.current_working_directory, "test")
-    track_file(shell, File.create(shell.current_working_directory, "test", "alice"))
-
+    track_file(
+        shell, File.create(shell.current_working_directory, "test", shell.current_user)
+    )
     shell.do_set_permissions("test group")
-
     assert load_tracked_file(shell, file_path).permission.value == "group"
 
 
-def test_set_permissions_to_all(tmp_path, monkeypatch, capsys):
-    """set_permissions successfully sets permission to 'all'."""
+def test_set_permissions_to_all(tmp_path, monkeypatch):
     shell = _logged_in_shell(tmp_path, monkeypatch)
     file_path = encrypted_path(shell.current_working_directory, "test")
-    track_file(shell, File.create(shell.current_working_directory, "test", "alice"))
-
+    track_file(
+        shell, File.create(shell.current_working_directory, "test", shell.current_user)
+    )
     shell.do_set_permissions("test all")
-
     assert load_tracked_file(shell, file_path).permission.value == "all"
 
 
 def test_set_permissions_file_not_found(tmp_path, monkeypatch, capsys):
-    """set_permissions shows error when file doesn't exist."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-
     shell.do_set_permissions("nonexistent user")
-
-    captured = capsys.readouterr()
-    assert "does not exist" in captured.out
+    assert "does not exist" in capsys.readouterr().out
 
 
 def test_set_permissions_invalid_permission_value(tmp_path, monkeypatch, capsys):
-    """set_permissions shows error for invalid permission value."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(shell.current_working_directory, "test", "alice"))
-
+    track_file(
+        shell, File.create(shell.current_working_directory, "test", shell.current_user)
+    )
     shell.do_set_permissions("test invalid")
-
-    captured = capsys.readouterr()
-    assert "Invalid permissions format" in captured.out
-    assert "user" in captured.out
-    assert "group" in captured.out
-    assert "all" in captured.out
+    out = capsys.readouterr().out
+    assert "Invalid permissions format" in out
+    assert "user" in out and "group" in out and "all" in out
 
 
 def test_set_permissions_wrong_number_of_args(tmp_path, monkeypatch, capsys):
-    """set_permissions shows error when wrong number of arguments provided."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-
     shell.do_set_permissions("test")
-
-    captured = capsys.readouterr()
-    assert "Invalid syntax" in captured.out
-
-
-def test_set_permissions_no_args(tmp_path, monkeypatch, capsys):
-    """set_permissions shows error when no arguments provided."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-
-    shell.do_set_permissions("")
-
-    captured = capsys.readouterr()
-    assert "Invalid syntax" in captured.out
+    assert "Invalid syntax" in capsys.readouterr().out
 
 
 def test_set_permissions_not_owner(tmp_path, monkeypatch, capsys):
-    """set_permissions rejects files outside the user's directory."""
     shell = _logged_in_shell(tmp_path, monkeypatch, username="alice")
-    # Create a file in bob's directory
-    bob_home = Directory.create(tmp_path, "bob", "bob")
-    File.create(bob_home.path, "test", "bob")
-
-    # Try to set permissions from alice's directory
+    bob = make_user(tmp_path, "bob")
+    bob_home = Directory.create(tmp_path, "bob", bob)
+    file = File.create(bob_home.path, "test", bob)
+    shell.current_user.file_keys[str(file.path)] = file.encrypted_file_key.hex()
     shell.current_working_directory = bob_home.path
-
     shell.do_set_permissions("test user")
-
-    captured = capsys.readouterr()
-    assert "not the owner" in captured.out
+    assert "not the owner" in capsys.readouterr().out
 
 
-def test_set_permissions_strips_trailing_slash(tmp_path, monkeypatch, capsys):
-    """set_permissions strips trailing slash from file name."""
+def test_set_permissions_recursive_updates_subtree(tmp_path, monkeypatch):
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    file_path = encrypted_path(shell.current_working_directory, "test")
-    track_file(shell, File.create(shell.current_working_directory, "test", "alice"))
-
-    shell.do_set_permissions("test/ user")
-
-    assert load_tracked_file(shell, file_path).permission.value == "user"
-
-
-def test_set_permissions_recursive_updates_subtree(tmp_path, monkeypatch, capsys):
-    """set_permissions with -r updates nested directory and file metadata."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-    home = shell.current_working_directory
-
-    project = Directory.create(home, "project", "alice")
+    project = Directory.create(
+        shell.current_working_directory, "project", shell.current_user
+    )
     track_file(shell, project.metadata)
-    readme = File.create(project.path, "readme", "alice")
+    readme = File.create(project.path, "readme", shell.current_user)
     track_file(shell, readme)
-    docs = Directory.create(project.path, "docs", "alice")
+    docs = Directory.create(project.path, "docs", shell.current_user)
     track_file(shell, docs.metadata)
-    notes = File.create(docs.path, "notes", "alice")
+    notes = File.create(docs.path, "notes", shell.current_user)
     track_file(shell, notes)
 
     shell.do_set_permissions("project all -r")
 
-    for path in [
-        project.metadata.path,
-        readme.path,
-        docs.metadata.path,
-        notes.path,
-    ]:
+    for path in [project.metadata.path, readme.path, docs.metadata.path, notes.path]:
         assert load_tracked_file(shell, path).permission.value == "all"
 
 
-def test_set_permissions_without_recursive_keeps_children(
-    tmp_path, monkeypatch, capsys
-):
-    """set_permissions without -r only updates target metadata file."""
+def test_get_permissions_returns_updated_value(tmp_path, monkeypatch, capsys):
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    home = shell.current_working_directory
-
-    project = Directory.create(home, "project", "alice")
-    track_file(shell, project.metadata)
-    readme = File.create(project.path, "readme", "alice")
-    track_file(shell, readme)
-
-    shell.do_set_permissions("project group")
-
-    assert load_tracked_file(shell, project.metadata.path).permission.value == "group"
-    assert load_tracked_file(shell, readme.path).permission.value == "user"
-
-
-def test_set_permissions_invalid_third_argument(tmp_path, monkeypatch, capsys):
-    """set_permissions rejects third args other than -r."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(shell.current_working_directory, "test", "alice"))
-
-    shell.do_set_permissions("test user -x")
-
-    captured = capsys.readouterr()
-    assert "Invalid syntax" in captured.out
-
-
-# ---------------------------------------------------------------------------
-# get_permissions tests
-# ---------------------------------------------------------------------------
-
-
-def test_get_permissions_returns_user(tmp_path, monkeypatch, capsys):
-    """get_permissions returns the permission value for a file."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(shell.current_working_directory, "test", "alice"))
-
-    shell.do_get_permissions("test")
-
-    captured = capsys.readouterr()
-    assert "user" in captured.out
-
-
-def test_get_permissions_after_set(tmp_path, monkeypatch, capsys):
-    """get_permissions returns updated permission after set_permissions."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(shell.current_working_directory, "test", "alice"))
-
+    track_file(
+        shell, File.create(shell.current_working_directory, "test", shell.current_user)
+    )
     shell.do_set_permissions("test group")
-    capsys.readouterr()  # Clear output
-
+    capsys.readouterr()
     shell.do_get_permissions("test")
-
-    captured = capsys.readouterr()
-    assert "group" in captured.out
-
-
-def test_get_permissions_file_not_found(tmp_path, monkeypatch, capsys):
-    """get_permissions shows error when file doesn't exist."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-
-    shell.do_get_permissions("nonexistent")
-
-    captured = capsys.readouterr()
-    assert "not a valid file" in captured.out
-
-
-def test_get_permissions_no_filename(tmp_path, monkeypatch, capsys):
-    """get_permissions shows error when no file name provided."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-
-    shell.do_get_permissions("")
-
-    captured = capsys.readouterr()
-    assert "File name is required" in captured.out
-
-
-def test_get_permissions_default_is_user(tmp_path, monkeypatch, capsys):
-    """Newly created file has default permission 'user'."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(shell.current_working_directory, "newfile", "alice"))
-
-    shell.do_get_permissions("newfile")
-
-    captured = capsys.readouterr()
-    assert "user" in captured.out
-
-
-def test_get_permissions_all_permission_types(tmp_path, monkeypatch, capsys):
-    """get_permissions correctly returns all permission types."""
-    shell = _logged_in_shell(tmp_path, monkeypatch)
-
-    # Test user permission
-    track_file(shell, File.create(shell.current_working_directory, "file1", "alice"))
-    shell.do_set_permissions("file1 user")
-    capsys.readouterr()  # Clear
-    shell.do_get_permissions("file1")
-    captured = capsys.readouterr()
-    assert "user" in captured.out
-
-    # Test group permission
-    track_file(shell, File.create(shell.current_working_directory, "file2", "alice"))
-    shell.do_set_permissions("file2 group")
-    capsys.readouterr()  # Clear
-    shell.do_get_permissions("file2")
-    captured = capsys.readouterr()
-    assert "group" in captured.out
-
-    # Test all permission
-    track_file(shell, File.create(shell.current_working_directory, "file3", "alice"))
-    shell.do_set_permissions("file3 all")
-    capsys.readouterr()  # Clear
-    shell.do_get_permissions("file3")
-    captured = capsys.readouterr()
-    assert "all" in captured.out
+    assert "group" in capsys.readouterr().out

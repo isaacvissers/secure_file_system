@@ -14,32 +14,6 @@ GroupsDict = Dict[str, Any]
 
 
 # --------------------
-# File Utilities
-# --------------------
-
-
-def _group_file(group_key: str) -> Path:
-    return GROUPS_DIR / f"{group_key}.json"
-
-
-def load_group(name: str) -> Optional[GroupsDict]:
-    admin = auth.get_admin_record()
-    if not admin:
-        return None
-
-    group_key = admin.group_keys.get(name)
-    if not group_key:
-        return None
-
-    path = _group_file(group_key)
-    if not path.exists():
-        return None
-
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-# --------------------
 # User Management (Add/Remove User from Group)
 # --------------------
 def get_groups_by_user(user: User | AdminUser) -> List[Group]:

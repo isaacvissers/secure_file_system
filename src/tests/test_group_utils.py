@@ -1,162 +1,77 @@
-# tests/conftest.py or test_group_utils_temp.py
-import tempfile
-from pathlib import Path
-
-import pytest
-
-import backend.auth as auth
 import backend.group_utils as group_utils
+from models.group import Group
+from models.user import User
 
 
-@pytest.fixture
-def temp_storage(monkeypatch):
-    """Use temporary directories for all storage and prevent real folder creation."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_path = Path(tmpdir)
-        users_dir = tmp_path / ".users"
-        groups_dir = tmp_path / ".groups"
-        files_dir = tmp_path / "files"  # mimic files storage
-        users_dir.mkdir()
-        groups_dir.mkdir()
-        files_dir.mkdir()
-
-        # Patch the module-level constants
-        monkeypatch.setattr(auth, "USERS_DIR", users_dir)
-        monkeypatch.setattr(group_utils, "GROUPS_DIR", groups_dir)
-        monkeypatch.setattr(auth, "FILES_DIR", files_dir)
-
-        # Patch file-path helpers to use temp dirs
-        monkeypatch.setattr(
-            auth, "_user_file_path", lambda user_key: users_dir / f"{user_key}.json"
-        )
-        monkeypatch.setattr(
-            group_utils,
-            "_group_file",
-            lambda group_key: groups_dir / f"{group_key}.json",
-        )
-
-        # Patch create_user_directory to just create a temp folder or do nothing
-        monkeypatch.setattr(
-            auth,
-            "create_user_directory",
-            lambda user_key: files_dir / f"user_{user_key}",
-        )
-
-        yield users_dir, groups_dir, files_dir
+def make_group(tmp_path, name="devs"):
+    group_key = "ab" * 32
+    group = Group(
+        group_name=name,
+        encrypted_name=name,
+        members={},
+        file_access={},
+        path=tmp_path / f"{name}.json",
+    )
+    group.save()
+    return group, group_key
 
 
-@pytest.fixture
-def admin_user(temp_storage):
-    """Create admin user."""
-    user = auth.create_user(auth.ADMIN, auth.ADMIN, is_admin=True)
-    assert user is not None
-    return auth.get_admin_record()
-
-
-@pytest.fixture
-def all_group(temp_storage, admin_user):
-    """Create the 'all' group required for user creation."""
-    group = group_utils.create_group("all")
-    assert group is not None
-    return group
-
-
-@pytest.fixture
-def normal_user(temp_storage, admin_user, all_group):
-    """Create normal user."""
-    user = auth.create_user("alice", "password123")
-    assert user is not None
+def make_user(tmp_path, username="alice"):
+    user = User(username=username, path=tmp_path / f"{username}.json")
+    user.save()
     return user
 
 
-# -------------------------------
-# Tests
-# -------------------------------
+def test_get_groups_by_user_returns_existing_groups(tmp_path):
+    user = make_user(tmp_path)
+    group, group_key = make_group(tmp_path, "devs")
+    user.group_keys[str(group.path)] = {"id": str(group.path), "key": group_key}
+
+    groups = group_utils.get_groups_by_user(user)
+
+    assert [g.group_name for g in groups] == ["devs"]
 
 
-def test_create_group(temp_storage, admin_user):
-    group = group_utils.create_group("devs")
-    assert group is not None
-    assert group["group_name"] == "devs"
-    assert group["members"] == {}
-    assert group["file_access"] == []
+def test_get_specific_group_for_user_returns_match(tmp_path):
+    user = make_user(tmp_path)
+    group, group_key = make_group(tmp_path, "ops")
+    user.group_keys[str(group.path)] = {"id": str(group.path), "key": group_key}
 
-    # Group key registered in admin
-    admin = auth.get_admin_record()
-    assert "devs" in admin.group_keys
-    group_key = admin.group_keys["devs"]
+    result = group_utils.get_specific_group_for_user(user, "ops")
 
-    # Group file exists
-    group_file = group_utils.GROUPS_DIR / f"{group_key}.json"
-    assert group_file.exists()
+    assert result is not None
+    assert result.group_name == "ops"
 
 
-def test_load_and_save_group(temp_storage, admin_user):
-    group_utils.create_group("qa")
-    admin = auth.get_admin_record()
-    group_key = admin.group_keys["qa"]
+def test_add_user_to_group_updates_members(tmp_path):
+    user = make_user(tmp_path)
+    group, _ = make_group(tmp_path)
 
-    group = group_utils.load_group("qa")
-    assert group["group_name"] == "qa"
-
-    # Modify and save
-    group["file_access"].append("file_1")
-    group_utils.save_group(group_key, group)
-
-    loaded = group_utils.load_group("qa")
-    assert "file_1" in loaded["file_access"]
+    assert group_utils.add_user_to_group(user, group) is True
+    assert group.members[user.username] == str(user.path)
 
 
-def test_add_user_to_group(temp_storage, admin_user, all_group, normal_user):
-    group_utils.create_group("design")
-    admin = auth.get_admin_record()
-    group_key = admin.group_keys["design"]
+def test_add_group_to_user_stores_group_access(tmp_path):
+    user = make_user(tmp_path)
+    group, group_key = make_group(tmp_path)
 
-    result = group_utils.add_user_to_group("design", "alice")
-    assert result is True
-
-    # Check group updated
-    group = group_utils.load_group("design")
-    user_key = admin.user_keys["alice"]
-    assert user_key in group["members"]
-    assert group["members"][user_key] == "alice"
-
-    # Check user updated
-    user = auth.load_user("alice")
-    assert group_key in user["group_keys"]
-
-    # Adding the same user again fails
-    result2 = group_utils.add_user_to_group("design", "alice")
-    assert result2 is False
+    assert group_utils.add_group_to_user(user, group, group_key) is True
+    assert user.group_keys["devs"]["id"] == str(group.path)
+    assert user.group_keys["devs"]["key"] == group_key
 
 
-def test_add_user_to_nonexistent_group(
-    temp_storage, admin_user, all_group, normal_user
-):
-    result = group_utils.add_user_to_group("nonexistent", "alice")
-    assert result is False
+def test_remove_user_from_group_removes_member(tmp_path):
+    user = make_user(tmp_path)
+    group, _ = make_group(tmp_path)
+    group.members[user.username] = str(user.path)
+
+    assert group_utils.remove_user_from_group(user, group) is True
+    assert user.username not in group.members
 
 
-def test_add_nonexistent_user_to_group(temp_storage, admin_user):
-    group_utils.create_group("ops")
-    result = group_utils.add_user_to_group("ops", "bob")
-    assert result is False
+def test_remove_group_from_user_missing_entry_returns_false(tmp_path, capsys):
+    user = make_user(tmp_path)
+    group, _ = make_group(tmp_path)
 
-
-def test_new_user_automatically_added_to_all_group(temp_storage, admin_user, all_group):
-    """Test that new users are automatically added to the 'all' group."""
-    # Create a new user
-    user = auth.create_user("bob", "password456")
-    assert user is not None
-
-    # Verify user was added to "all" group
-    all_group_data = group_utils.load_group("all")
-    admin = auth.get_admin_record()
-    bob_user_key = admin.user_keys["bob"]
-    assert bob_user_key in all_group_data["members"]
-    assert all_group_data["members"][bob_user_key] == "bob"
-
-    # Verify user's group_keys includes the "all" group
-    bob_user = auth.load_user("bob")
-    all_group_key = admin.group_keys["all"]
-    assert all_group_key in bob_user["group_keys"]
+    assert group_utils.remove_group_from_user(user, group) is False
+    assert "not found in user's profile" in capsys.readouterr().out
