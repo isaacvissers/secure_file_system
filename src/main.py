@@ -291,7 +291,7 @@ class SecureFS(cmd.Cmd):
                     display_name = self._resolve_directory_display_name(
                         self.current_working_directory,
                         entry.name,
-                        show_decrypt_error=True,
+                        show_decrypt_error=False,
                     )
                     print(f"{display_name}/")
             elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
@@ -302,7 +302,7 @@ class SecureFS(cmd.Cmd):
                 if decrypted_file:
                     print(decrypted_file.file_name)
                 else:
-                    print(f"Error decrypting file {entry}, displaying encrypted name.")
+                    # print(f"Error decrypting file {entry}, displaying encrypted name.")
                     print(entry.name)
 
     @requires_login
@@ -554,6 +554,19 @@ class SecureFS(cmd.Cmd):
                         add_file_to_group(group_obj, group_key, file, file_key)
                     else:
                         print(f"Error: Could not access group record for {group_name}")
+            if permissions == Permission.ALL.value:
+                file_key = file.encrypted_file_key
+                for group_name, group_info in self.current_user.group_keys.items():
+                    if group_name.lower() == "all":
+                        group_key = bytes.fromhex(group_info["key"])
+                        group_id = group_info["id"]
+                        group_obj = Group.get_group(Path(group_id), group_key)
+                        if group_obj:
+                            add_file_to_group(group_obj, group_key, file, file_key)
+                        else:
+                            print(
+                                f"Error: Could not access group record for {group_name}"
+                            )
 
     @requires_login
     def do_get_permissions(self, arg):

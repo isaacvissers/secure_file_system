@@ -12,7 +12,7 @@ USERS_DIR = SRC_DIR / "storage/.users"
 USERS_DIR.mkdir(parents=True, exist_ok=True)
 ADMIN = "admin"
 
-FileInfo: TypeAlias = Tuple[str, str]  # (decrypted file name, file integrity hash)
+FileInfo: TypeAlias = str  # decrypted file name
 
 
 @dataclass

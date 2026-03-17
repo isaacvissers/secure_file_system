@@ -20,6 +20,43 @@ FILE_INDEX = "encrypted_name"
 # --------------------
 
 
+def _extract_file_info_name(value: Any) -> str | None:
+    """Return decrypted display name from current or legacy `file_info` value shapes.
+
+    Supported values:
+    - str (current shape)
+    - tuple/list with first element = name (legacy shape)
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (tuple, list)) and value:
+        first = value[0]
+        if isinstance(first, str):
+            return first
+    return None
+
+
+def _normalize_file_info_map(file_info: Any) -> tuple[dict[str, str], bool]:
+    """Normalize `file_info` values to names-only mapping.
+
+    Returns `(normalized_map, changed)` where `changed` indicates whether any
+    value shape differed from the normalized representation.
+    """
+    if not isinstance(file_info, dict):
+        return {}, True
+
+    normalized: dict[str, str] = {}
+    changed = False
+    for key, value in file_info.items():
+        name = _extract_file_info_name(value)
+        if name is not None:
+            normalized[str(key)] = name
+        if not (isinstance(value, str) and value == name):
+            changed = True
+
+    return normalized, changed
+
+
 def _normalize_file_key(file_key: Any) -> str:
     """Return a stable string identifier for a file key.
 
@@ -92,6 +129,9 @@ def add_file_to_user(file_name: Any, user: User, file_key: Any = None) -> bool:
     Normalize `file_key` and add it to the user's `file_keys` list.
     Also add additional file information to user file.
     """
+    normalized_file_info, _ = _normalize_file_info_map(user.file_info)
+    user.file_info = normalized_file_info
+
     # add file_key
     fk = _normalize_file_key(file_key)
     user.file_keys[file_name] = fk
@@ -119,7 +159,7 @@ def add_file_to_user(file_name: Any, user: User, file_key: Any = None) -> bool:
     if file and file.path.exists():
         hashes = _read_integrity_hashes(file.path)
         if hashes:
-            user.file_info[file_name] = (file.file_name, hashes[1])
+            user.file_info[file_name] = file.file_name
 
     user.save()
 
@@ -186,15 +226,15 @@ def sync_file_info_for_user(
     if not user:
         return False
 
-    if not isinstance(user.get("file_info"), dict):
-        user["file_info"] = {}
+    normalized_file_info, _ = _normalize_file_info_map(user.file_info)
+    user.file_info = normalized_file_info
 
     path_obj = tracked_path if isinstance(tracked_path, Path) else Path(tracked_path)
     path_key = str(path_obj)
 
     file_key_hex = _normalize_file_key(file_key) if file_key is not None else None
     if not file_key_hex:
-        file_key_hex = (user.get("file_keys") or {}).get(path_key)
+        file_key_hex = (user.file_keys or {}).get(path_key)
     if not file_key_hex:
         return False
 
@@ -204,11 +244,7 @@ def sync_file_info_for_user(
     if file is None:
         return False
 
-    hashes = _read_integrity_hashes(path_obj)
-    if hashes is None:
-        return False
-
-    user["file_info"][path_key] = (file.file_name, hashes[1])
+    user.file_info[path_key] = file.file_name
     save_user(user_key, user)
     return True
 
@@ -353,8 +389,9 @@ def _build_compromised_display_path(
             metadata_path = current_dir / f".{part}"
             # Prefer file_info: works even when the metadata file is unreadable/corrupted.
             info = (file_info or {}).get(str(metadata_path))
-            if info:
-                displayed_parts.append(info[0])
+            info_name = _extract_file_info_name(info)
+            if info_name:
+                displayed_parts.append(info_name)
             else:
                 metadata_key_hex = file_keys.get(str(metadata_path))
                 decrypted_name = _decrypted_display_for_path(
@@ -366,8 +403,9 @@ def _build_compromised_display_path(
 
         # Last component: prefer file_info for the display name.
         info = (file_info or {}).get(str(path))
-        if info:
-            displayed_parts.append(info[0])
+        info_name = _extract_file_info_name(info)
+        if info_name:
+            displayed_parts.append(info_name)
         else:
             file_key_hex = file_keys.get(str(path))
             decrypted_leaf = _decrypted_display_for_path(path, file_key_hex)
@@ -384,8 +422,8 @@ def check_user_file_integrities(current_user: dict, user_home: Path) -> list[str
     file_info = current_user.file_info
     if not isinstance(file_keys, dict):
         return []
-    if not isinstance(file_info, dict):
-        file_info = {}
+    normalized_file_info, _ = _normalize_file_info_map(file_info)
+    file_info = normalized_file_info
 
     compromised_paths: set[Path] = set()
 
@@ -404,15 +442,8 @@ def check_user_file_integrities(current_user: dict, user_home: Path) -> list[str
             compromised_paths.add(tracked_path)
             continue
 
-        info = file_info.get(path_str)
-        if info:
-            # Baseline comparison: catches silent re-encryption with different content.
-            if hashes[1] != info[1]:
-                compromised_paths.add(tracked_path)
-        else:
-            # No baseline yet: fall back to verifying the file decrypts.
-            if _decrypted_display_for_path(tracked_path, file_key_hex) is None:
-                compromised_paths.add(tracked_path)
+        # Integrity validation is based solely on the embedded trailing hash.
+        # No separate hash baseline is stored in `file_info`.
 
     display_paths = [
         _build_compromised_display_path(path, user_home, username, file_keys, file_info)
