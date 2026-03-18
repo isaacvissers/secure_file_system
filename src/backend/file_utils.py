@@ -7,9 +7,9 @@ from typing import Any
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from backend.auth import _get_admin_or_fail, get_admin_record, load_user, save_user
-from backend.group_utils import get_user_groups_by_username, load_group, save_group
 from models.file import File
+from models.group import Group
+from models.user import User
 
 FILE_INDEX = "encrypted_name"
 
@@ -92,69 +92,22 @@ def _normalize_file_key(file_key: Any) -> str:
     return str(file_key)
 
 
-def get_user_file_keys(username: str) -> list:
-    """Return the list of file keys associated with the user."""
-    user = load_user(username)
-    if not user:
-        print(f"User '{username}' not found.")
-        return []
-
-    file_keys = user.get("file_keys", [])
-    if isinstance(file_keys, dict):
-        return list(file_keys.values())
-    if isinstance(file_keys, list):
-        return file_keys
-    return [str(file_keys)]
-
-
-def _infer_file_name(file_name_or_key: Any) -> str:
-    """Return a stable mapping key for storing a user's file key."""
-    path = getattr(file_name_or_key, "path", None)
-    if path is not None:
-        return str(path)
-
-    metadata = getattr(file_name_or_key, "metadata", None)
-    if metadata is not None:
-        metadata_path = getattr(metadata, "path", None)
-        if metadata_path is not None:
-            return str(metadata_path)
-
-    return _normalize_file_key(file_name_or_key)
-
-
 def add_file_to_user(
-    file_name: Any, file_key: Any = None, username: str = None
+    file_name: Any,
+    user: User,
+    file_key: Any = None,
+    user_file_key: bytes | None = None,
 ) -> bool:
     """
     Normalize `file_key` and add it to the user's `file_keys` list.
     Also add additional file information to user file.
     """
-    if username is None:
-        username = file_key
-        file_key = file_name
-        file_name = _infer_file_name(file_key)
-
-    admin = _get_admin_or_fail()
-    if not admin:
-        return False
-
-    user_key = getattr(admin, "user_keys", {}).get(username)
-    if not user_key:
-        return False
-
-    user = load_user(username)
-    if not user:
-        return False
-
-    if not isinstance(user.get("file_keys"), dict):
-        user["file_keys"] = {}
-
-    normalized_file_info, _ = _normalize_file_info_map(user.get("file_info"))
-    user["file_info"] = normalized_file_info
+    normalized_file_info, _ = _normalize_file_info_map(user.file_info)
+    user.file_info = normalized_file_info
 
     # add file_key
     fk = _normalize_file_key(file_key)
-    user["file_keys"][file_name] = fk
+    user.file_keys[file_name] = fk
 
     # add file_info
     # `file_key` may be raw bytes (e.g., File.create path), so resolve path
@@ -177,50 +130,29 @@ def add_file_to_user(
             file = try_decrypt_directory(tracked_path, fk)
 
     if file and file.path.exists():
-        user["file_info"][file_name] = file.file_name
+        hashes = _read_integrity_hashes(file.path)
+        if hashes:
+            user.file_info[file_name] = file.file_name
 
-    save_user(user_key, user)
+    save_key = user_file_key or getattr(user, "_encryption_key", None)
+    if not save_key:
+        raise ValueError("Missing user file key when saving metadata")
+    user.save(save_key)
 
     return True
 
 
-def add_file_to_group(group_name: str, file_key: Any) -> bool:
+def add_file_to_group(group: Group, group_key: str, file: File, file_key: Any) -> bool:
     """Normalize `file_key` and add it to the group's `file_keys` list."""
-    admin = _get_admin_or_fail()
-    if not admin:
-        return None
-
-    group_key = admin.group_keys.get(group_name)
-
-    if not group_key:
-        print(f"Group '{group_name}' not found.")
-        return False
-
-    group = load_group(group_name)
-    if not group:
-        print("Group file not found.")
-        return False
-
     fk = _normalize_file_key(file_key)
-    group.setdefault("file_access", [])
-    if fk not in group["file_access"]:
-        group["file_access"].append(fk)
-        save_group(group_key, group)
-
-    return True
-
-
-def add_file_to_user_and_groups(file_key: Any, username: str) -> bool:
-    """Add file to the user and to all groups the user belongs to."""
-    if not add_file_to_user(file_key, username):
-        return False
-
-    if not get_user_groups_by_username(username):
-        return True
-
-    fk = _normalize_file_key(file_key)
-    for g in get_user_groups_by_username(username) or []:
-        add_file_to_group(g, fk)
+    file_id = str(file.path)
+    group.file_access[file_id] = {
+        "path": file_id,
+        "key": fk if isinstance(fk, str) else fk.hex(),
+        "name": file.file_name,
+        "owner": file.owner_name,
+    }
+    group.save(group_key)
 
     return True
 
@@ -250,35 +182,23 @@ def _read_integrity_hashes(path: Path) -> tuple[str, str] | None:
     return hashlib.sha256(content[:-64]).hexdigest(), stored
 
 
-def sync_file_info_for_user(
-    username: str,
-    tracked_path: str | Path,
-    file_key: Any = None,
-) -> bool:
+def sync_file_info_for_user(user: User, file: File) -> bool:
     """Refresh a single `file_info` entry from on-disk encrypted content."""
     # Silent lookup: File.save may call this in test fixtures that intentionally
     # don't create an admin record, and this should not print to stdout.
-    admin = get_admin_record()
-    if not admin:
-        return False
+    normalized_file_info, _ = _normalize_file_info_map(user.file_info)
+    user.file_info = normalized_file_info
 
-    user_key = getattr(admin, "user_keys", {}).get(username)
-    if not user_key:
-        return False
-
-    user = load_user(username)
-    if not user:
-        return False
-
-    normalized_file_info, _ = _normalize_file_info_map(user.get("file_info"))
-    user["file_info"] = normalized_file_info
-
-    path_obj = tracked_path if isinstance(tracked_path, Path) else Path(tracked_path)
+    path_obj = file.path
     path_key = str(path_obj)
 
-    file_key_hex = _normalize_file_key(file_key) if file_key is not None else None
+    file_key_hex = (
+        _normalize_file_key(file.encrypted_file_key)
+        if file.encrypted_file_key is not None
+        else None
+    )
     if not file_key_hex:
-        file_key_hex = (user.get("file_keys") or {}).get(path_key)
+        file_key_hex = (user.file_keys or {}).get(path_key)
     if not file_key_hex:
         return False
 
@@ -288,40 +208,34 @@ def sync_file_info_for_user(
     if file is None:
         return False
 
-    user["file_info"][path_key] = file.file_name
-    save_user(user_key, user)
+    user.file_info[path_key] = file.file_name
+    save_key = getattr(user, "_encryption_key", None)
+    if not save_key:
+        raise ValueError("Missing user file key when saving metadata")
+    user.save(save_key)
     return True
 
 
-def remove_file_tracking_for_user(username: str, tracked_path: str | Path) -> bool:
+def remove_file_tracking_for_user(user: User, tracked_path: str | Path) -> bool:
     """Remove stale file tracking for a path from both `file_keys` and `file_info`."""
-    admin = _get_admin_or_fail()
-    if not admin:
-        return False
-
-    user_key = getattr(admin, "user_keys", {}).get(username)
-    if not user_key:
-        return False
-
-    user = load_user(username)
-    if not user:
-        return False
-
     path_key = str(
         tracked_path if isinstance(tracked_path, Path) else Path(tracked_path)
     )
 
     changed = False
-    if isinstance(user.get("file_keys"), dict) and path_key in user["file_keys"]:
-        user["file_keys"].pop(path_key, None)
+    if isinstance(user.file_keys, dict) and path_key in user.file_keys:
+        user.file_keys.pop(path_key, None)
         changed = True
 
-    if isinstance(user.get("file_info"), dict) and path_key in user["file_info"]:
-        user["file_info"].pop(path_key, None)
+    if isinstance(user.file_info, dict) and path_key in user.file_info:
+        user.file_info.pop(path_key, None)
         changed = True
 
     if changed:
-        save_user(user_key, user)
+        save_key = getattr(user, "_encryption_key", None)
+        if not save_key:
+            raise ValueError("Missing user file key when saving metadata")
+        user.save(save_key)
     return changed
 
 
@@ -472,9 +386,10 @@ def _build_compromised_display_path(
 
 def check_user_file_integrities(current_user: dict, user_home: Path) -> list[str]:
     """Return compromised owned paths as username-prefixed, display-ready strings."""
-    username = current_user.get("username", "user")
-    file_keys = current_user.get("file_keys", {}) or {}
-    file_info = current_user.get("file_info", {}) or {}
+    user_metadata = current_user
+    username = current_user.username
+    file_keys = current_user.file_keys
+    file_info = current_user.file_info
     if not isinstance(file_keys, dict):
         return []
     normalized_file_info, _ = _normalize_file_info_map(file_info)

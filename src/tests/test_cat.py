@@ -1,10 +1,11 @@
+import hashlib
+
 import main as main_module
 from main import SecureFS
 from models.directory import Directory
 from models.file import File
-from tests.encryption_helpers import track_file
+from models.user import User
 from tests.path_helpers import encrypted_path
-from tests.test_login import _make_user_data
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -14,16 +15,23 @@ from tests.test_login import _make_user_data
 def _logged_in_shell(tmp_path, monkeypatch):
     """Return a SecureFS instance logged in with cwd inside FILES_DIR/alice."""
     monkeypatch.setattr(main_module, "FILES_DIR", tmp_path)
-    user_home = Directory.create(tmp_path, "alice", "alice")
+
+    user = User(username="alice", path=str(tmp_path / "alice-user.json"))
+    user_key = hashlib.sha256(b"cat-shell").digest()
+    user._encryption_key = user_key
+    user_home = Directory.create(tmp_path, "alice", user)
 
     shell = SecureFS()
-    shell.current_user = _make_user_data(user_id=1, username="alice")
-    shell.current_user["file_keys"][
-        str(user_home.metadata.path)
-    ] = user_home.metadata.encrypted_file_key.hex()
+    shell.current_user = user
+    shell.current_user_key = user_key
     shell.current_working_directory = user_home.path
     shell._update_prompt()
     return shell
+
+
+def _track_file(shell: SecureFS, file: File) -> File:
+    shell.current_user.file_keys[str(file.path)] = file.encrypted_file_key.hex()
+    return file
 
 
 # ---------------------------------------------------------------------------
@@ -34,10 +42,13 @@ def _logged_in_shell(tmp_path, monkeypatch):
 def test_cat_reads_file_body(tmp_path, monkeypatch, capsys):
     """cat prints the decrypted file body for a valid encrypted file."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(
+    _track_file(
         shell,
         File.create(
-            shell.current_working_directory, "notes", "alice", body="hello world"
+            shell.current_working_directory,
+            "notes",
+            shell.current_user,
+            body="hello world",
         ),
     )
 
@@ -70,7 +81,13 @@ def test_cat_errors_for_missing_file(tmp_path, monkeypatch, capsys):
 def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
     """cat reports a read error when the session does not have the file key."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    File.create(shell.current_working_directory, "broken", "alice", body="secret")
+    file = File.create(
+        shell.current_working_directory,
+        "broken",
+        shell.current_user,
+        body="secret",
+    )
+    shell.current_user.file_keys.pop(str(file.path), None)
 
     shell.do_cat("broken")
 
@@ -81,7 +98,9 @@ def test_cat_errors_when_file_key_is_missing(tmp_path, monkeypatch, capsys):
 def test_cat_with_json_suffix_argument_is_not_supported(tmp_path, monkeypatch, capsys):
     """cat treats a .json suffix literally when looking up the path."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(shell.current_working_directory, "notes", "alice"))
+    _track_file(
+        shell, File.create(shell.current_working_directory, "notes", shell.current_user)
+    )
 
     shell.do_cat("notes.json")
 
@@ -104,7 +123,9 @@ def test_cat_handles_malformed_json_file(tmp_path, monkeypatch, capsys):
 def test_cat_prints_blank_line_for_empty_body(tmp_path, monkeypatch, capsys):
     """cat prints a newline when the decrypted body is empty."""
     shell = _logged_in_shell(tmp_path, monkeypatch)
-    track_file(shell, File.create(shell.current_working_directory, "empty", "alice"))
+    _track_file(
+        shell, File.create(shell.current_working_directory, "empty", shell.current_user)
+    )
     capsys.readouterr()
 
     shell.do_cat("empty")

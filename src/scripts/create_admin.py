@@ -1,3 +1,4 @@
+import hashlib
 import sys
 from pathlib import Path
 
@@ -6,66 +7,41 @@ SRC_DIR = CURRENT_DIR.parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from backend.auth import (
-    ADMIN,
-    STORAGE_DIR,
-    _user_file_path,
-    create_user,
-    get_admin_key,
-    get_admin_record,
-)
-from backend.group_utils import create_group, load_group
+from backend.auth import ADMIN, STORAGE_DIR, _user_file_path, get_admin_key
+from backend.group_utils import add_group_to_user
+from models.group import GROUPS_DIR, Group
+from models.user import AdminUser
 
 
-def ensure_admin_user(username: str, password: str, reset_password: bool = False):
-    """
-    Ensure an admin user exists. If `reset_password` is True and an admin
-    record exists, remove it and recreate the admin user.
-
-    Returns a tuple of (user_dict_or_admin_data, status) where status is
-    'created', 'updated', 'exists', or 'missing'.
-    """
+def ensure_admin_user(username: str, password: str):
     admin_path = _user_file_path(get_admin_key())
 
     if not admin_path.exists():
-        # No admin file, create one
-        new_user = create_user(username, password, is_admin=True)
-        return new_user, "created"
+        admin_user, admin_key = AdminUser.create(username, password)
+        return admin_user, admin_key, "created"
 
-    if reset_password:
-        # Remove old admin record
-        try:
-            admin_path.unlink()
-        except Exception as e:
-            print(f"Warning: could not delete old admin record: {e}")
-        new_user = create_user(username, password, is_admin=True)
-        return new_user, "updated"
-
-    # Admin file exists
-    admin = get_admin_record()
-    if admin is None:
-        return None, "missing"
-
-    return admin.__dict__, "exists"
+    return None, None, "exists"
 
 
 def ensure_group(name: str):
     """Ensure a group exists and return ('created' | 'exists' | 'missing')."""
-    existing = load_group(name)
-    if existing is not None:
-        return existing, "exists"
+    encrypted_name = hashlib.sha256(name.encode("utf-8")).hexdigest()
+    group_path = GROUPS_DIR / encrypted_name
 
-    created = create_group(name)
-    if created is None:
-        return None, "missing"
+    if group_path.exists():
+        return None, None, "exists"
 
-    return created, "created"
+    all_group, master_key = Group.create(name)
+    if all_group is None:
+        return None, None, "missing"
+
+    return all_group, master_key, "created"
 
 
 def main() -> None:
     print(f"Storage directory: {STORAGE_DIR}")
 
-    admin_data, status = ensure_admin_user(ADMIN, ADMIN)
+    admin_user, admin_key, status = ensure_admin_user(ADMIN, ADMIN)
     if status in {"created", "updated"}:
         print(f"Admin user {status}: {ADMIN}")
     elif status == "exists":
@@ -73,9 +49,15 @@ def main() -> None:
     else:
         print("Admin user record missing or corrupted.")
 
-    _, group_status = ensure_group("all")
+    all_group, group_master_key, group_status = ensure_group("all")
     if group_status == "created":
         print("Group created: all")
+        if admin_user is not None and group_master_key:
+            key_material = (
+                admin_key if isinstance(admin_key, bytes) else admin_key.encode()
+            )
+            add_group_to_user(admin_user, all_group, group_master_key, key_material)
+            admin_user.save(key_material)
     elif group_status == "exists":
         print("Group already exists: all")
     else:
