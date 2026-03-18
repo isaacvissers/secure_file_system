@@ -20,12 +20,17 @@ from backend.file_utils import (
     try_decrypt_directory,
     try_decrypt_file,
 )
-from backend.group_utils import add_group_to_user, add_user_to_group
+from backend.group_utils import (
+    add_group_to_user,
+    add_user_to_group,
+    remove_group_from_user,
+    remove_user_from_group,
+)
 from cli_utils import *
 from models.directory import Directory
 from models.file import File, Permission
 from models.group import Group
-from models.user import ADMIN, USERS_DIR, AdminUser, User
+from models.user import ADMIN, USERS_DIR, AdminUser, User, derive_user_file_key
 
 
 class SecureFS(cmd.Cmd):
@@ -120,6 +125,7 @@ class SecureFS(cmd.Cmd):
         merged_file_keys.update(self.current_user.file_keys)
 
         refreshed_user.file_keys = merged_file_keys
+        refreshed_user._encryption_key = self.current_user_key
         self.current_user = refreshed_user
 
     @requires_logged_out
@@ -139,13 +145,14 @@ class SecureFS(cmd.Cmd):
             print(f"Error: User '{username}' does not exist.")
             return
 
+        file_key = derive_user_file_key(username, password)
         if username == ADMIN:
-            user, user_key = AdminUser.get_user(user_file_path)
+            user, _ = AdminUser.get_user(user_file_path, file_key)
         else:
-            user, user_key = User.get_user(user_file_path)
+            user, _ = User.get_user(user_file_path, file_key)
 
         if not user:
-            print("Error: Could not load user record.")
+            print("Error: Incorrect password.")
             return
 
         if not user.verify_password(password):
@@ -153,7 +160,8 @@ class SecureFS(cmd.Cmd):
             return
 
         self.current_user = user
-        self.current_user_key = user_key
+        self.current_user_key = file_key
+        self.current_user._encryption_key = self.current_user_key
 
         # set working directory to the user's files directory
         self.current_working_directory = (
@@ -670,22 +678,35 @@ class SecureFS(cmd.Cmd):
             print("Error: Username already exists.")
             return
 
-        add_user_to_admin(self.current_user, created_user, master_key)
-
-        all_group_info = self.current_user.group_keys.get("all")
+        add_user_to_admin(
+            self.current_user, created_user, master_key, self.current_user_key
+        )
 
         create_user_directory(created_user)
 
+        all_group_info = self.current_user.group_keys.get("all")
         if all_group_info:
-            group_path = Path(all_group_info["id"])
-            group_key = bytes.fromhex(all_group_info["key"])
-            all_group_obj = Group.get_group(group_path, group_key)
+            try:
+                group_path = Path(all_group_info["id"])
 
-            if all_group_obj:
-                add_user_to_group(created_user, all_group_obj)
-                add_group_to_user(created_user, all_group_obj, all_group_info["key"])
-        else:
-            print(f"Warning: Group 'all' not found.")
+                raw_key = all_group_info["key"]
+                if isinstance(raw_key, str) and (
+                    raw_key.startswith("b'") or raw_key.startswith('b"')
+                ):
+                    raw_key = raw_key[2:-1]
+
+                group_key_bytes = bytes.fromhex(raw_key)
+                all_group_obj = Group.get_group(group_path, group_key_bytes)
+
+                if all_group_obj:
+                    add_user_to_group(
+                        created_user, all_group_obj, group_key_bytes, master_key
+                    )
+                    add_group_to_user(
+                        created_user, all_group_obj, group_key_bytes, master_key
+                    )
+            except Exception as e:
+                print(f"Error adding user to 'all' group: {e}")
 
         print(f"User created: {username} ")
 
@@ -703,7 +724,9 @@ class SecureFS(cmd.Cmd):
             return
 
         group, group_master_key = Group.create(group_name)
-        add_group_to_user(self.current_user, group, group_master_key)
+        add_group_to_user(
+            self.current_user, group, group_master_key, self.current_user_key
+        )
 
         print(f"Group created: {group_name}")
 
@@ -721,20 +744,19 @@ class SecureFS(cmd.Cmd):
             print("Error: Missing group or user metadata.")
             return
 
-        group_obj = Group.get_group(
-            Path(group_info["id"]), bytes.fromhex(group_info["key"])
-        )
+        group_key_bytes = bytes.fromhex(group_info["key"])
+        group_obj = Group.get_group(Path(group_info["id"]), group_key_bytes)
 
         user_path = USERS_DIR / user_metadata["id"]
         user_key = bytes.fromhex(user_metadata["key"])
-        target_user = self.current_user.get_user(user_path, user_key)
+        target_user, target_user_key = User.get_user(user_path, user_key)
 
         if not group_obj or not target_user:
             print("Error: Could not load the records.")
             return
 
-        add_user_to_group(target_user[0], group_obj)
-        add_group_to_user(target_user[0], group_obj, group_info["key"])
+        add_user_to_group(target_user, group_obj, group_key_bytes, target_user_key)
+        add_group_to_user(target_user, group_obj, group_key_bytes, target_user_key)
 
         print(f"Success: {username} added to {group_name}.")
 
@@ -760,28 +782,24 @@ class SecureFS(cmd.Cmd):
             print(f"Error: User '{username}' does not exist.")
             return
 
-        user_file_path = USERS_DIR / user_metadata["id"]
-        user_key_bytes = bytes.fromhex(user_metadata["key"])
-        target_user = self.current_user.get_user(user_file_path, user_key_bytes)
-
-        if target_user:
-            if group_name in target_user.group_keys:
-                del target_user.group_keys[group_name]
-                target_user.save()
-            else:
-                print(f"Warning: Group '{group_name}' wasn't in {username}'s key list.")
-        else:
-            print(f"Error: Could not access record for user '{username}'.")
-            return
-
         group_path = Path(group_info["id"])
         group_key = bytes.fromhex(group_info["key"])
         group_obj = Group.get_group(group_path, group_key)
 
-        if target_user.get_encrypted_name() in group_obj.members:
-            del group_obj.members[target_user.get_encrypted_name()]
-            group_obj.save(group_key)
-            print(f"User '{target_user.username}' successfully removed from group '{group_name}'.")
+        user_file_path = USERS_DIR / user_metadata["id"]
+        target_user, target_user_key = User.get_user(
+            user_file_path, bytes.fromhex(user_metadata["key"])
+        )
+
+        if not target_user:
+            print(f"Error: Could not access user record for '{username}'.")
+            return
+
+        if group_name in target_user.group_keys:
+            remove_group_from_user(target_user, group_obj, target_user_key)
+
+        if remove_user_from_group(target_user, group_obj, group_key, target_user_key):
+            print(f"User '{username}' successfully removed from group '{group_name}'.")
         else:
             print(f"User '{target_user.username}' was not a member of group '{group_name}'.")
 

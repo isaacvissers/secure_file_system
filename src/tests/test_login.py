@@ -102,7 +102,9 @@ def test_admin_login_uses_admin_loader(monkeypatch, capsys, tmp_path):
         auth_verifier=hashlib.sha256(f"admintestsalt".encode("utf-8")).hexdigest(),
         path=admin_path,
     )
-    admin.save()
+    admin_key = hashlib.sha256("admin_admin_psalt".encode("utf-8")).digest()
+    admin._encryption_key = admin_key
+    admin.save(admin_key)
     Directory.create(main_module.FILES_DIR, "admin", admin)
     monkeypatch.setattr(main_module, "prompt_credentials", lambda: ("admin", "admin"))
 

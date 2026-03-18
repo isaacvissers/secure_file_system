@@ -4,7 +4,7 @@ from pathlib import Path
 import main as main_module
 from main import SecureFS
 from models.directory import Directory
-from models.user import User
+from models.user import User, derive_user_file_key
 
 
 def make_user(
@@ -23,7 +23,9 @@ def make_user(
         auth_verifier=verifier,
         path=user_path,
     )
-    user.save()
+    user_key = derive_user_file_key(username, password)
+    user.save(user_key)
+    user._encryption_key = user_key
     return user
 
 
@@ -36,7 +38,7 @@ def make_logged_in_shell(
 
     shell = SecureFS()
     shell.current_user = user
-    shell.current_user_key = None
+    shell.current_user_key = getattr(user, "_encryption_key", None)
     shell.current_working_directory = user_home.path
     shell._update_prompt()
     return shell

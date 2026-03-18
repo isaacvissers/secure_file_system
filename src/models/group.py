@@ -28,9 +28,9 @@ class Group:
     def create(
         cls,
         name: str,
-    ) -> "Group":
+    ) -> tuple["Group", bytes]:
         """Create the group on disk as <name> and return a Group instance."""
-        master_key = os.urandom(32).hex()
+        master_key = os.urandom(32)
         encrypted_name = hashlib.sha256(name.encode("utf-8")).hexdigest()
         file_key = AESGCM.generate_key(bit_length=256)
         real_path = GROUPS_DIR / encrypted_name
@@ -42,32 +42,33 @@ class Group:
             encrypted_file_key=file_key,
             path=real_path,
         )
-        instance.save()
+        instance.save(master_key)
 
         return instance, master_key
 
     @classmethod
     def get_group(cls, path: Path, file_key: bytes | None = None) -> "Group":
         """Load and decrypt a group record by group name."""
-        if file_key is None:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        else:
-            payload = path.read_bytes()
-            # if len(payload) < 13:
-            #     raise ValueError("Encrypted file is too short")
-            # nonce = payload[:12]
-            # encrypted_blob = payload[12:]
-            # decrypted = AESGCM(file_key).decrypt(nonce, encrypted_blob, None)
-            # data = json.loads(decrypted.decode("utf-8"))
-            # TODO: REMOVE!!!
-            data = json.loads(payload.decode("utf-8"))
+        payload = path.read_bytes()
+        if len(payload) < 13:
+            raise ValueError("Encrypted file is too short")
+
+        nonce = payload[:12]
+        encrypted_blob = payload[12:]
+
+        decrypted = AESGCM(file_key).decrypt(nonce, encrypted_blob, None)
+        data = json.loads(decrypted.decode("utf-8"))
+
+        if "path" in data:
+            data["path"] = Path(data["path"])
+
+        if data.get("encrypted_file_key"):
+            data["encrypted_file_key"] = bytes.fromhex(data["encrypted_file_key"])
+
         return cls(**data)
 
     def to_json(self) -> str:
         data = asdict(self)
-        if "encrypted_file_key" in data:
-            del data["encrypted_file_key"]
 
         def serializer(obj):
             if isinstance(obj, Path):
@@ -82,7 +83,12 @@ class Group:
         if not self.path:
             raise ValueError("Group path not set")
 
-        output_path = Path(self.path)
-        json_data = self.to_json()
+        if file_key is None:
+            raise ValueError("File key required for secure group save")
 
-        output_path.write_text(json_data, encoding="utf-8")
+        plaintext = self.to_json().encode("utf-8")
+        nonce = os.urandom(12)
+        aesgcm = AESGCM(file_key)
+        ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+
+        self.path.write_bytes(nonce + ciphertext)

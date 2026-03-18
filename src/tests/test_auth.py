@@ -50,17 +50,25 @@ def test_create_user_directory_calls_directory_create(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "FILES_DIR", tmp_path)
     calls = {}
 
-    def fake_create(base: Path, name: str, user: User):
+    def fake_create(base: Path, name: str, user: User, **kwargs):
         calls["base"] = base
         calls["name"] = name
         calls["user"] = user
+        calls["permission"] = kwargs.get("permission")
         return "created-dir"
 
     monkeypatch.setattr(auth.Directory, "create", fake_create)
 
     user = User(username="mike")
     assert auth.create_user_directory(user) == "created-dir"
-    assert calls == {"base": tmp_path, "name": "mike", "user": user}
+    from models.file import Permission
+
+    assert calls == {
+        "base": tmp_path,
+        "name": "mike",
+        "user": user,
+        "permission": Permission.GROUP,
+    }
 
 
 def test_add_user_to_admin_updates_admin_mapping(tmp_path):
@@ -71,16 +79,18 @@ def test_add_user_to_admin_updates_admin_mapping(tmp_path):
         auth_verifier="verifier",
         path=admin_path,
     )
-    admin.save()
+    admin_file_key = b"\xaa" * 32
+    admin.save(admin_file_key)
 
     target_path = tmp_path / "target-user-file"
     target = User(username="neo", path=target_path)
 
-    auth.add_user_to_admin(admin, target, "masterkey123")
+    auth.add_user_to_admin(admin, target, "masterkey123", admin_file_key)
 
-    saved = json.loads(admin_path.read_text(encoding="utf-8"))
-    assert saved["user_keys"]["neo"]["id"] == target_path.name
-    assert saved["user_keys"]["neo"]["key"] == "masterkey123"
+    loaded_admin, _ = AdminUser.get_user(admin_path, admin_file_key)
+    assert loaded_admin is not None
+    assert loaded_admin.user_keys["neo"]["id"] == target_path.name
+    assert loaded_admin.user_keys["neo"]["key"] == "masterkey123"
 
 
 def test_user_file_path_uses_users_dir(tmp_path, monkeypatch):

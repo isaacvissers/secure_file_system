@@ -14,20 +14,13 @@ from models.user import AdminUser
 
 
 def ensure_admin_user(username: str, password: str):
-    """
-    Ensure an admin user exists. If `reset_password` is True and an admin
-    record exists, remove it and recreate the admin user.
-
-    Returns a tuple of (admin_user, status) where status is
-    'created', 'updated', 'exists', or 'missing'.
-    """
     admin_path = _user_file_path(get_admin_key())
 
     if not admin_path.exists():
-        admin_user, _ = AdminUser.create(username, password)
-        return admin_user, "created"
+        admin_user, admin_key = AdminUser.create(username, password)
+        return admin_user, admin_key, "created"
 
-    return admin_user, "exists"
+    return None, None, "exists"
 
 
 def ensure_group(name: str):
@@ -36,8 +29,7 @@ def ensure_group(name: str):
     group_path = GROUPS_DIR / encrypted_name
 
     if group_path.exists():
-        existing_group = Group.get_group(group_path)
-        return existing_group, None, "exists"
+        return None, None, "exists"
 
     all_group, master_key = Group.create(name)
     if all_group is None:
@@ -49,7 +41,7 @@ def ensure_group(name: str):
 def main() -> None:
     print(f"Storage directory: {STORAGE_DIR}")
 
-    admin_user, status = ensure_admin_user(ADMIN, ADMIN)
+    admin_user, admin_key, status = ensure_admin_user(ADMIN, ADMIN)
     if status in {"created", "updated"}:
         print(f"Admin user {status}: {ADMIN}")
     elif status == "exists":
@@ -60,12 +52,16 @@ def main() -> None:
     all_group, group_master_key, group_status = ensure_group("all")
     if group_status == "created":
         print("Group created: all")
+        if admin_user is not None and group_master_key:
+            key_material = (
+                admin_key if isinstance(admin_key, bytes) else admin_key.encode()
+            )
+            add_group_to_user(admin_user, all_group, group_master_key, key_material)
+            admin_user.save(key_material)
     elif group_status == "exists":
         print("Group already exists: all")
     else:
         print("Group record missing or could not be created: all")
-    if group_status == "created" and admin_user is not None and group_master_key:
-        add_group_to_user(admin_user, all_group, group_master_key)
 
 
 if __name__ == "__main__":
