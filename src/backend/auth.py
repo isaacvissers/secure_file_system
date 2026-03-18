@@ -7,6 +7,7 @@ from backend.constants import ADMIN, SALT, SALT_BYTES
 from backend.group_utils import add_user_to_group
 from backend.storage_paths import get_storage_dir
 from models.directory import Directory
+from models.file import Permission
 from models.user import AdminUser, User
 
 STORAGE_DIR = get_storage_dir()
@@ -82,7 +83,7 @@ def _user_file_path(user_key: str) -> Path:
 
 def create_user_directory(user: User) -> Path:
     """Create the home directory for a new user under FILES_DIR."""
-    return Directory.create(FILES_DIR, user.username, user)
+    return Directory.create(FILES_DIR, user.username, user, permission=Permission.GROUP)
 
 
 # --------------------
