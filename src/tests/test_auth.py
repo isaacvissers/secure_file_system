@@ -50,17 +50,25 @@ def test_create_user_directory_calls_directory_create(tmp_path, monkeypatch):
     monkeypatch.setattr(auth, "FILES_DIR", tmp_path)
     calls = {}
 
-    def fake_create(base: Path, name: str, user: User):
+    def fake_create(base: Path, name: str, user: User, **kwargs):
         calls["base"] = base
         calls["name"] = name
         calls["user"] = user
+        calls["permission"] = kwargs.get("permission")
         return "created-dir"
 
     monkeypatch.setattr(auth.Directory, "create", fake_create)
 
     user = User(username="mike")
     assert auth.create_user_directory(user) == "created-dir"
-    assert calls == {"base": tmp_path, "name": "mike", "user": user}
+    from models.file import Permission
+
+    assert calls == {
+        "base": tmp_path,
+        "name": "mike",
+        "user": user,
+        "permission": Permission.GROUP,
+    }
 
 
 def test_add_user_to_admin_updates_admin_mapping(tmp_path):
