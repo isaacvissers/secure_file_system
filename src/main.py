@@ -294,13 +294,21 @@ class SecureFS(cmd.Cmd):
             print(f"Error: '{directory_name}' is not a valid directory.")
             return
 
-        file_key_hex = self.current_user.get_file_key(new_path.parent / f".{new_path.name}")
+        file_key_hex = self.current_user.get_file_key(
+            new_path.parent / f".{new_path.name}"
+        )
         if file_key_hex is None:
             print(f"Error: You do not have permission to access '{directory_name}'.")
             return
         else:
             try:
-                File.get_file((self.current_working_directory / f".{hashlib.sha256(directory_name.encode('utf-8')).hexdigest()}"), bytes.fromhex(file_key_hex))
+                File.get_file(
+                    (
+                        self.current_working_directory
+                        / f".{hashlib.sha256(directory_name.encode('utf-8')).hexdigest()}"
+                    ),
+                    bytes.fromhex(file_key_hex),
+                )
             except Exception as e:
                 print(f"Error: {e}")
                 return
@@ -369,7 +377,9 @@ class SecureFS(cmd.Cmd):
         try:
             file_key_hex = self.current_user.get_file_key(file_path)
             if file_key_hex is None:
-                print(f"Error: You do not have permission to access '{file_path.name}'.")
+                print(
+                    f"Error: You do not have permission to access '{file_path.name}'."
+                )
                 return
             file_key = bytes.fromhex(file_key_hex)
             file = File.get_file(file_path, file_key)
@@ -441,7 +451,9 @@ class SecureFS(cmd.Cmd):
             if not file_path.exists():
                 if not self.current_working_directory.is_relative_to(
                     FILES_DIR
-                    / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
+                    / hashlib.sha256(
+                        self.current_user.username.encode("utf-8")
+                    ).hexdigest()
                 ):
                     print("Error: Cannot create files outside of your home directory.")
                     return
@@ -463,9 +475,7 @@ class SecureFS(cmd.Cmd):
                 if not file_key_hex:
                     print("Error: You do not have permission to modify this file.")
                     return
-                file_key = bytes.fromhex(
-                    file_key_hex
-                )
+                file_key = bytes.fromhex(file_key_hex)
                 file = File.get_file(
                     file_path,
                     file_key,
@@ -487,7 +497,7 @@ class SecureFS(cmd.Cmd):
         if len(tokens) != 2:
             print("Error: Invalid syntax. Usage: mv <source> <destination>")
             return
-        
+
         if not self.current_working_directory.is_relative_to(
             FILES_DIR
             / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
@@ -801,7 +811,9 @@ class SecureFS(cmd.Cmd):
         if remove_user_from_group(target_user, group_obj, group_key, target_user_key):
             print(f"User '{username}' successfully removed from group '{group_name}'.")
         else:
-            print(f"User '{target_user.username}' was not a member of group '{group_name}'.")
+            print(
+                f"User '{target_user.username}' was not a member of group '{group_name}'."
+            )
 
     def do_exit(self, arg):
         return True

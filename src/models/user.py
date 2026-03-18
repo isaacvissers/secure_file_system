@@ -7,8 +7,8 @@ from typing import Any, Dict, Optional, Tuple, TypeAlias
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from models.group import Group
 from backend.constants import ADMIN, SALT
+from models.group import Group
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 USERS_DIR = SRC_DIR / "storage/.users"
@@ -115,7 +115,7 @@ class User:
             (password + self.auth_salt).encode("utf-8")
         ).hexdigest()
         return attempt == self.auth_verifier
-    
+
     def get_encrypted_name(self) -> str:
         """Return the encrypted name of the user for storage purposes."""
         return hashlib.sha256(self.username.encode("utf-8")).hexdigest()
@@ -133,6 +133,7 @@ class User:
                     key_hex = group_obj.file_access[str(file_path)]["key"]
                     break
         return key_hex if key_hex else None
+
 
 @dataclass
 class AdminUser(User):
