@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 
+os.environ.setdefault("SFS_DOTENV_OVERRIDE", "0")
 os.environ.setdefault("SALT", "psalt")
 os.environ.setdefault("ADMIN", "admin")
 

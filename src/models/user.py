@@ -8,10 +8,10 @@ from typing import Any, Dict, Optional, Tuple, TypeAlias
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from backend.constants import ADMIN, SALT
+from backend.storage_paths import get_storage_dir
 from models.group import Group
 
-SRC_DIR = Path(__file__).resolve().parents[1]
-USERS_DIR = SRC_DIR / "storage/.users"
+USERS_DIR = get_storage_dir() / ".users"
 USERS_DIR.mkdir(parents=True, exist_ok=True)
 
 FileInfo: TypeAlias = str  # decrypted file name

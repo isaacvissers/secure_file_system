@@ -3,13 +3,12 @@ import json
 import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from pathlib import Path as _Path
 from typing import Dict, Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from backend.storage_paths import get_storage_dir
 
-SRC_DIR = _Path(__file__).resolve().parents[1]
-GROUPS_DIR = SRC_DIR / "storage/.groups"
+GROUPS_DIR = get_storage_dir() / ".groups"
 GROUPS_DIR.mkdir(parents=True, exist_ok=True)
 
 
