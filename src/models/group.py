@@ -22,7 +22,6 @@ class Group:
         str, Dict[str, str]
     ]  # {filename: {id: 16-byte file name, key: 32-byte file key}}
     path: Path
-    encrypted_file_key: Optional[bytes] = None
 
     @classmethod
     def create(
@@ -32,14 +31,12 @@ class Group:
         """Create the group on disk as <name> and return a Group instance."""
         master_key = os.urandom(32)
         encrypted_name = hashlib.sha256(name.encode("utf-8")).hexdigest()
-        file_key = AESGCM.generate_key(bit_length=256)
         real_path = GROUPS_DIR / encrypted_name
         instance = cls(
             group_name=name,
             encrypted_name=encrypted_name,
             members={},
             file_access={},
-            encrypted_file_key=file_key,
             path=real_path,
         )
         instance.save(master_key)
@@ -61,9 +58,6 @@ class Group:
 
         if "path" in data:
             data["path"] = Path(data["path"])
-
-        if data.get("encrypted_file_key"):
-            data["encrypted_file_key"] = bytes.fromhex(data["encrypted_file_key"])
 
         return cls(**data)
 

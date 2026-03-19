@@ -11,7 +11,6 @@ def make_group(tmp_path, name="devs"):
         members={},
         file_access={},
         path=tmp_path / f"{name}.json",
-        encrypted_file_key=b"\x00" * 32,
     )
     group.save(group_key)
     return group, group_key
