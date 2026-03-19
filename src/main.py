@@ -373,7 +373,6 @@ class SecureFS(cmd.Cmd):
             print(f"Error: '{arg.strip()}' is not a valid file.")
             return
 
-        # TODO: ensure user has permission to read the file
         try:
             file_key_hex = self.current_user.get_file_key(file_path)
             if file_key_hex is None:
@@ -395,8 +394,6 @@ class SecureFS(cmd.Cmd):
           echo [-n] <content> > <file_name>
           echo [-n] <content> >> <file_name>
         """
-        # TODO: ensure user has permission to write to file
-
         try:
             lexer = shlex.shlex(arg, posix=True, punctuation_chars=">")
             lexer.whitespace_split = True
@@ -662,7 +659,8 @@ class SecureFS(cmd.Cmd):
             print(f"Error: '{file_name}' is not a valid file.")
             return
         try:
-            file_key = bytes.fromhex(self.current_user.file_keys.get(str(file_path)))
+            file_key_hex = self.current_user.get_file_key(file_path)
+            file_key = bytes.fromhex(file_key_hex)
             file = File.get_file(file_path, file_key)
             print(file.permission.value)
         except Exception as e:
