@@ -1,5 +1,10 @@
+import hashlib
+import os
+from pathlib import Path
+
 from models.directory import Directory
 from models.file import File
+from models.group import Group
 from tests.encryption_helpers import load_tracked_file, track_file
 from tests.path_helpers import encrypted_path
 from tests.test_helpers import make_logged_in_shell, make_user
@@ -7,6 +12,26 @@ from tests.test_helpers import make_logged_in_shell, make_user
 
 def _logged_in_shell(tmp_path, monkeypatch, username="alice"):
     return make_logged_in_shell(tmp_path, monkeypatch, username=username)
+
+
+def _attach_group(shell, tmp_path, group_name):
+    group_key = os.urandom(32)
+    encrypted_name = hashlib.sha256(group_name.encode("utf-8")).hexdigest()
+    group_path = tmp_path / f"{group_name}.group"
+    group = Group(
+        group_name=group_name,
+        encrypted_name=encrypted_name,
+        members={},
+        file_access={},
+        path=group_path,
+    )
+    group.save(group_key)
+    shell.current_user.group_keys[group_name] = {
+        "id": str(group_path),
+        "key": group_key.hex(),
+    }
+    shell.current_user.save(shell.current_user_key)
+    return group_path, group_key
 
 
 def test_set_permissions_to_user(tmp_path, monkeypatch):
@@ -101,3 +126,50 @@ def test_get_permissions_returns_updated_value(tmp_path, monkeypatch, capsys):
     capsys.readouterr()
     shell.do_get_permissions("test")
     assert "group" in capsys.readouterr().out
+
+
+def test_set_permissions_all_to_group_moves_group_access(tmp_path, monkeypatch):
+    shell = _logged_in_shell(tmp_path, monkeypatch)
+    all_group_path, all_group_key = _attach_group(shell, tmp_path, "all")
+    dev_group_path, dev_group_key = _attach_group(shell, tmp_path, "dev")
+    ops_group_path, ops_group_key = _attach_group(shell, tmp_path, "ops")
+
+    file = File.create(shell.current_working_directory, "report", shell.current_user)
+    track_file(shell, file)
+
+    shell.do_set_permissions("report all")
+    shell.do_set_permissions("report group")
+
+    all_group = Group.get_group(all_group_path, all_group_key)
+    dev_group = Group.get_group(dev_group_path, dev_group_key)
+    ops_group = Group.get_group(ops_group_path, ops_group_key)
+    file_id = str(file.path)
+
+    assert file_id not in all_group.file_access
+    assert file_id in dev_group.file_access
+    assert file_id in ops_group.file_access
+
+
+def test_set_permissions_group_to_user_removes_group_access(tmp_path, monkeypatch):
+    shell = _logged_in_shell(tmp_path, monkeypatch)
+    _attach_group(shell, tmp_path, "all")
+    dev_group_path, dev_group_key = _attach_group(shell, tmp_path, "dev")
+    _attach_group(shell, tmp_path, "ops")
+
+    file = File.create(shell.current_working_directory, "report", shell.current_user)
+    track_file(shell, file)
+
+    shell.do_set_permissions("report group")
+    shell.do_set_permissions("report user")
+
+    dev_group = Group.get_group(dev_group_path, dev_group_key)
+    file_id = str(file.path)
+
+    assert file_id not in dev_group.file_access
+
+    # Also assert no unexpected file access remains in other groups.
+    for group_name, group_info in shell.current_user.group_keys.items():
+        group_obj = Group.get_group(
+            Path(group_info["id"]), bytes.fromhex(group_info["key"])
+        )
+        assert file_id not in group_obj.file_access
