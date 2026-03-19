@@ -56,7 +56,7 @@ def test_add_user_to_group_updates_members(tmp_path):
     group, group_key = make_group(tmp_path)
 
     assert group_utils.add_user_to_group(user, group, group_key, user_key) is True
-    assert group.members[user.username] == str(user.path)
+    assert group.members[user.get_encrypted_name()] == user.username
 
 
 def test_add_group_to_user_stores_group_access(tmp_path):
@@ -71,10 +71,10 @@ def test_add_group_to_user_stores_group_access(tmp_path):
 def test_remove_user_from_group_removes_member(tmp_path):
     user, user_key = make_user(tmp_path)
     group, group_key = make_group(tmp_path)
-    group.members[user.username] = str(user.path)
+    group.members[user.get_encrypted_name()] = user.username
 
     assert group_utils.remove_user_from_group(user, group, group_key, user_key) is True
-    assert user.username not in group.members
+    assert user.get_encrypted_name() not in group.members
 
 
 def test_remove_group_from_user_missing_entry_returns_false(tmp_path, capsys):

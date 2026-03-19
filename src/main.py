@@ -60,6 +60,20 @@ class SecureFS(cmd.Cmd):
             print(
                 f"Error decrypting metadata for {metadata_path}, displaying encrypted name."
             )
+        # Load all of the users groups and try to resolve users directories that way
+        for group_name, group_info in self.current_user.group_keys.items():
+            group_key = bytes.fromhex(group_info["key"])
+            group_id = group_info["id"]
+            group_obj = Group.get_group(Path(group_id), group_key)
+            if str(metadata_path) in group_obj.file_access.keys():
+                return group_obj.file_access[str(metadata_path)]["name"]
+            if parent_dir == FILES_DIR:
+                if group_name.lower() == "all":
+                    continue
+                if group_obj and encrypted_dir_name in group_obj.members:
+                    return group_obj.members[encrypted_dir_name]
+        if parent_dir == FILES_DIR:
+            return None
         return encrypted_dir_name
 
     def _build_displayed_path(self):
@@ -76,7 +90,8 @@ class SecureFS(cmd.Cmd):
 
         for part in relative_path.parts:
             displayed_part = self._resolve_directory_display_name(base_dir, part)
-            displayed_path += f"/{displayed_part}"
+            if displayed_part:
+                displayed_path += f"/{displayed_part}"
 
             base_dir = base_dir / part
 
@@ -279,6 +294,24 @@ class SecureFS(cmd.Cmd):
             print(f"Error: '{directory_name}' is not a valid directory.")
             return
 
+        file_key_hex = self.current_user.get_file_key(
+            new_path.parent / f".{new_path.name}"
+        )
+        if file_key_hex is None:
+            print(f"Error: You do not have permission to access '{directory_name}'.")
+            return
+        else:
+            try:
+                File.get_file(
+                    (
+                        self.current_working_directory
+                        / f".{hashlib.sha256(directory_name.encode('utf-8')).hexdigest()}"
+                    ),
+                    bytes.fromhex(file_key_hex),
+                )
+            except Exception as e:
+                print(f"Error: {e}")
+                return
         self.current_working_directory = new_path
         self._update_prompt()
 
@@ -298,11 +331,12 @@ class SecureFS(cmd.Cmd):
                         entry.name,
                         show_decrypt_error=False,
                     )
-                    print(f"{display_name}/")
+                    if display_name:
+                        print(f"{display_name}/")
             elif entry.stem.startswith(".") and entry.stem[1:] in dir_names:
                 continue
             else:
-                file_key_hex = self.current_user.file_keys.get(str(entry))
+                file_key_hex = self.current_user.get_file_key(entry)
                 decrypted_file = try_decrypt_file(entry, file_key_hex)
                 if decrypted_file:
                     print(decrypted_file.file_name)
@@ -341,7 +375,12 @@ class SecureFS(cmd.Cmd):
 
         # TODO: ensure user has permission to read the file
         try:
-            file_key_hex = self.current_user.file_keys.get(str(file_path))
+            file_key_hex = self.current_user.get_file_key(file_path)
+            if file_key_hex is None:
+                print(
+                    f"Error: You do not have permission to access '{file_path.name}'."
+                )
+                return
             file_key = bytes.fromhex(file_key_hex)
             file = File.get_file(file_path, file_key)
             print(file.body)
@@ -410,7 +449,14 @@ class SecureFS(cmd.Cmd):
         try:
             # TODO: decrypt body contents first, modify the decrypted content, then re-encrypt and write back to file instead of just writing raw output
             if not file_path.exists():
-                # TODO I think we need to rethink this part too
+                if not self.current_working_directory.is_relative_to(
+                    FILES_DIR
+                    / hashlib.sha256(
+                        self.current_user.username.encode("utf-8")
+                    ).hexdigest()
+                ):
+                    print("Error: Cannot create files outside of your home directory.")
+                    return
                 logical_name = file_name
                 file = File.create(
                     self.current_working_directory,
@@ -421,10 +467,15 @@ class SecureFS(cmd.Cmd):
                 self._refresh_current_user(
                     {str(file.path): file.encrypted_file_key.hex()}
                 )
+            elif not file_path.is_file():
+                print(f"Error: '{file_name}' is not a valid file.")
+                return
             else:
-                file_key = bytes.fromhex(
-                    self.current_user.file_keys.get(str(file_path))
-                )
+                file_key_hex = self.current_user.get_file_key(file_path)
+                if not file_key_hex:
+                    print("Error: You do not have permission to modify this file.")
+                    return
+                file_key = bytes.fromhex(file_key_hex)
                 file = File.get_file(
                     file_path,
                     file_key,
@@ -445,6 +496,13 @@ class SecureFS(cmd.Cmd):
         tokens = shlex.split(arg)
         if len(tokens) != 2:
             print("Error: Invalid syntax. Usage: mv <source> <destination>")
+            return
+
+        if not self.current_working_directory.is_relative_to(
+            FILES_DIR
+            / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
+        ):
+            print("Error: Cannot rename files outside of your home directory.")
             return
 
         # rename the file, must be within same directory
@@ -715,6 +773,7 @@ class SecureFS(cmd.Cmd):
     @requires_admin
     def do_remove_user_from_group(self, arg):
         """Usage: remove_user_from_group"""
+        # TODO this is broken. Not sure why but thats a later problem
         group_name = prompt_required_text("group name")
         if not group_name:
             return
@@ -752,7 +811,9 @@ class SecureFS(cmd.Cmd):
         if remove_user_from_group(target_user, group_obj, group_key, target_user_key):
             print(f"User '{username}' successfully removed from group '{group_name}'.")
         else:
-            print(f"User '{username}' was not a member of group '{group_name}'.")
+            print(
+                f"User '{target_user.username}' was not a member of group '{group_name}'."
+            )
 
     def do_exit(self, arg):
         return True

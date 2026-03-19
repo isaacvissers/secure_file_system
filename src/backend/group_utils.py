@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import backend.auth as auth
 from backend.storage_paths import get_storage_dir
 from models.group import Group
 from models.user import AdminUser, User
@@ -61,7 +60,7 @@ def add_user_to_group(
     user_file_key: bytes | None = None,
 ) -> bool:
     """Add a user to the group's member list."""
-    group.members[user.username] = str(user.path)
+    group.members[user.get_encrypted_name()] = user.username
     if user_file_key is not None:
         user.save(user_file_key)
     group.save(group_key)
@@ -98,8 +97,8 @@ def remove_user_from_group(
     user_file_key: bytes | None = None,
 ) -> bool:
     """Remove a user's access from the group's member list."""
-    if user.username in group.members:
-        del group.members[user.username]
+    if user.get_encrypted_name() in group.members:
+        del group.members[user.get_encrypted_name()]
         if user_file_key is not None:
             user.save(user_file_key)
         group.save(group_key)
