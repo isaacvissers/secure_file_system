@@ -184,11 +184,13 @@ class SecureFS(cmd.Cmd):
         self._update_prompt()
         print(f"Login successful. Welcome {username}.")
 
-    @requires_login
     def do_logout(self, arg):
         """
         Usage: logout
         """
+        if not self.current_user:
+            print("Must be logged in.")
+            return
         self.current_user = None
         self.current_working_directory = None
         self._update_prompt()

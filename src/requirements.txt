@@ -3,3 +3,4 @@ pytest
 black
 isort
 pre-commit
+python-dotenv
