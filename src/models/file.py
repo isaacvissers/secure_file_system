@@ -111,8 +111,8 @@ class File:
                 group_key = bytes.fromhex(group_info["key"])
                 group_id = group_info["id"]
 
-                from models.group import Group
                 from backend.file_utils import add_file_to_group
+                from models.group import Group
 
                 group_obj = Group.get_group(Path(group_id), group_key)
 
@@ -126,8 +126,8 @@ class File:
                 if group_name.lower() == "all":
                     group_key = bytes.fromhex(group_info["key"])
                     group_id = group_info["id"]
-                    from models.group import Group
                     from backend.file_utils import add_file_to_group
+                    from models.group import Group
 
                     group_obj = Group.get_group(Path(group_id), group_key)
                     if group_obj:
