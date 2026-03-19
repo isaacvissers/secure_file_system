@@ -99,6 +99,9 @@ class SecureFS(cmd.Cmd):
 
     def _update_prompt(self):
         """Update the interactive prompt to include the logged-in username."""
+        if self.current_user and self.current_user.username == ADMIN:
+            self.prompt = "SFS (admin)> "
+            return
         displayed_path = self._build_displayed_path()
         if displayed_path is not None:
             self.prompt = f"SFS{displayed_path}> "
