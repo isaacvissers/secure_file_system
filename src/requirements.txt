@@ -2,5 +2,5 @@ cryptography
 pytest
 black
 isort
-pre - commit
-python - dotenv
+pre-commit
+python-dotenv
