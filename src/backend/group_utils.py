@@ -96,9 +96,25 @@ def remove_user_from_group(
     group_key: bytes,
     user_file_key: bytes | None = None,
 ) -> bool:
-    """Remove a user's access from the group's member list."""
+    """Remove a user's access from the group's member list and their files."""
     if user.get_encrypted_name() in group.members:
         del group.members[user.get_encrypted_name()]
+
+        # Remove all files belonging to this user from the group
+        from backend.auth import FILES_DIR
+
+        user_home_dir = FILES_DIR / user.get_encrypted_name()
+        user_home_dir_str = str(user_home_dir)
+
+        files_to_remove = [
+            file_id
+            for file_id in group.file_access.keys()
+            if file_id.startswith(user_home_dir_str)
+        ]
+
+        for file_id in files_to_remove:
+            del group.file_access[file_id]
+
         if user_file_key is not None:
             user.save(user_file_key)
         group.save(group_key)
