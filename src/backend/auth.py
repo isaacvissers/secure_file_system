@@ -1,4 +1,5 @@
 import json
+import os
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -27,8 +28,12 @@ UserDict = Dict[str, Any]
 def requires_login(func):
     @wraps(func)
     def wrapper(self, arg):
-        if not getattr(self, "current_user", None):
+        user = getattr(self, "current_user", None)
+        if not user:
             print("Must be logged in.")
+            return
+        if isinstance(user, AdminUser):
+            print("Admin cannot run this command.")
             return
         return func(self, arg)
 
@@ -37,9 +42,9 @@ def requires_login(func):
 
 def requires_admin(func):
     @wraps(func)
-    @requires_login
     def wrapper(self, arg):
-        if not isinstance(self.current_user, AdminUser):
+        user = getattr(self, "current_user", None)
+        if not user or not isinstance(user, AdminUser):
             print("Must be logged in as Admin")
             return
         return func(self, arg)
@@ -65,7 +70,8 @@ def requires_logged_out(func):
 
 def create_user_key(username: str, password: str) -> str:
     """Generate a user key. Replace with proper encryption later."""
-    return f"{username}_{password}_{SALT}"
+    salt = os.getenv("SALT", SALT)
+    return f"{username}_{password}_{salt}"
 
 
 def get_admin_key() -> str:

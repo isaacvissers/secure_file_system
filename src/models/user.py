@@ -18,7 +18,8 @@ FileInfo: TypeAlias = str  # decrypted file name
 
 def derive_user_file_key(username: str, password: str) -> bytes:
     """Deterministically derive the AES key used to encrypt a user's record."""
-    raw = f"{username}_{password}_{SALT}"
+    salt = os.getenv("SALT", SALT)
+    raw = f"{username}_{password}_{salt}"
     return hashlib.sha256(raw.encode("utf-8")).digest()
 
 
