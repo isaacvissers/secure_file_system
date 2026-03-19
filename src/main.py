@@ -600,6 +600,34 @@ class SecureFS(cmd.Cmd):
 
         target_paths = list(dict.fromkeys(target_paths))
 
+        def _remove_file_from_group(group_obj, group_key, tracked_file_id):
+            if tracked_file_id in group_obj.file_access:
+                del group_obj.file_access[tracked_file_id]
+                group_obj.save(group_key)
+
+        def _apply_group_access(target_file, target_file_key, mode):
+            file_id = str(target_file.path)
+
+            for group_name, group_info in self.current_user.group_keys.items():
+                group_key = bytes.fromhex(group_info["key"])
+                group_id = group_info["id"]
+                group_obj = Group.get_group(Path(group_id), group_key)
+
+                if not group_obj:
+                    print(f"Error: Could not access group record for {group_name}")
+                    continue
+
+                _remove_file_from_group(group_obj, group_key, file_id)
+
+                should_add = (
+                    mode == Permission.ALL.value and group_name.lower() == "all"
+                ) or (mode == Permission.GROUP.value and group_name.lower() != "all")
+
+                if should_add:
+                    add_file_to_group(
+                        group_obj, group_key, target_file, target_file_key
+                    )
+
         for target_path in target_paths:
             if target_path.is_dir():
                 continue
@@ -608,35 +636,12 @@ class SecureFS(cmd.Cmd):
             file.permission = Permission(permissions)
             file.save()
             sync_file_info_for_user(self.current_user, file)
-            if permissions == Permission.GROUP.value:
-                file_key = file.encrypted_file_key
-                for group_name, group_info in self.current_user.group_keys.items():
-
-                    if group_name.lower() == "all":
-                        continue
-
-                    group_key = bytes.fromhex(group_info["key"])
-                    group_id = group_info["id"]
-
-                    group_obj = Group.get_group(Path(group_id), group_key)
-
-                    if group_obj:
-                        add_file_to_group(group_obj, group_key, file, file_key)
-                    else:
-                        print(f"Error: Could not access group record for {group_name}")
-            if permissions == Permission.ALL.value:
-                file_key = file.encrypted_file_key
-                for group_name, group_info in self.current_user.group_keys.items():
-                    if group_name.lower() == "all":
-                        group_key = bytes.fromhex(group_info["key"])
-                        group_id = group_info["id"]
-                        group_obj = Group.get_group(Path(group_id), group_key)
-                        if group_obj:
-                            add_file_to_group(group_obj, group_key, file, file_key)
-                        else:
-                            print(
-                                f"Error: Could not access group record for {group_name}"
-                            )
+            if permissions in {
+                Permission.USER.value,
+                Permission.GROUP.value,
+                Permission.ALL.value,
+            }:
+                _apply_group_access(file, file.encrypted_file_key, permissions)
 
     @requires_login
     def do_get_permissions(self, arg):
