@@ -4,28 +4,15 @@ import json
 import shlex
 from pathlib import Path
 
-from backend.auth import (
-    FILES_DIR,
-    add_user_to_admin,
-    create_user_directory,
-    requires_admin,
-    requires_logged_out,
-    requires_login,
-)
-from backend.file_utils import (
-    add_file_to_group,
-    check_user_file_integrities,
-    remove_file_tracking_for_user,
-    sync_file_info_for_user,
-    try_decrypt_directory,
-    try_decrypt_file,
-)
-from backend.group_utils import (
-    add_group_to_user,
-    add_user_to_group,
-    remove_group_from_user,
-    remove_user_from_group,
-)
+from backend.auth import (FILES_DIR, add_user_to_admin, create_user_directory,
+                          requires_admin, requires_logged_out, requires_login)
+from backend.file_utils import (add_file_to_group, check_user_file_integrities,
+                                remove_file_tracking_for_user,
+                                sync_file_info_for_user, try_decrypt_directory,
+                                try_decrypt_file)
+from backend.group_utils import (add_group_to_user, add_user_to_group,
+                                 remove_group_from_user,
+                                 remove_user_from_group)
 from cli_utils import *
 from models.directory import Directory
 from models.file import File, Permission

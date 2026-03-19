@@ -1,14 +1,12 @@
-from backend.file_utils import (
-    add_file_to_group,
-    add_file_to_user,
-    check_user_file_integrities,
-    remove_file_tracking_for_user,
-    sync_file_info_for_user,
-)
+from backend.file_utils import (add_file_to_group, add_file_to_user,
+                                check_user_file_integrities,
+                                remove_file_tracking_for_user,
+                                sync_file_info_for_user)
 from models.directory import Directory
 from models.file import File
 from models.group import Group
-from tests.tamper_helpers import flip_last_gcm_tag_nibble, flip_last_hash_nibble
+from tests.tamper_helpers import (flip_last_gcm_tag_nibble,
+                                  flip_last_hash_nibble)
 from tests.test_helpers import make_user
 
 

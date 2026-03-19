@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from backend.storage_paths import get_storage_dir
 
 GROUPS_DIR = get_storage_dir() / ".groups"
