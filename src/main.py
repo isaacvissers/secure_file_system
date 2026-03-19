@@ -777,6 +777,15 @@ class SecureFS(cmd.Cmd):
             return
 
         add_user_to_group(target_user, group_obj, group_key_bytes, target_user_key)
+        for file in target_user.file_keys.keys():
+            file_key_hex = target_user.file_keys.get(file)
+            if file_key_hex is None:
+                continue
+            file_key = bytes.fromhex(file_key_hex)
+            file_obj = File.get_file(Path(file), file_key)
+            if file_obj and file_obj.permission == Permission.GROUP:
+                add_file_to_group(group_obj, group_key_bytes, file_obj, file_key)
+        group_obj.save(group_key_bytes)
         add_group_to_user(target_user, group_obj, group_key_bytes, target_user_key)
 
         print(f"Success: {username} added to {group_name}.")
