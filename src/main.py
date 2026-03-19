@@ -4,28 +4,15 @@ import json
 import shlex
 from pathlib import Path
 
-from backend.auth import (
-    FILES_DIR,
-    add_user_to_admin,
-    create_user_directory,
-    requires_admin,
-    requires_logged_out,
-    requires_login,
-)
-from backend.file_utils import (
-    add_file_to_group,
-    check_user_file_integrities,
-    remove_file_tracking_for_user,
-    sync_file_info_for_user,
-    try_decrypt_directory,
-    try_decrypt_file,
-)
-from backend.group_utils import (
-    add_group_to_user,
-    add_user_to_group,
-    remove_group_from_user,
-    remove_user_from_group,
-)
+from backend.auth import (FILES_DIR, add_user_to_admin, create_user_directory,
+                          requires_admin, requires_logged_out, requires_login)
+from backend.file_utils import (add_file_to_group, check_user_file_integrities,
+                                remove_file_tracking_for_user,
+                                sync_file_info_for_user, try_decrypt_directory,
+                                try_decrypt_file)
+from backend.group_utils import (add_group_to_user, add_user_to_group,
+                                 remove_group_from_user,
+                                 remove_user_from_group)
 from cli_utils import *
 from models.directory import Directory
 from models.file import File, Permission
@@ -772,6 +759,15 @@ class SecureFS(cmd.Cmd):
             return
 
         add_user_to_group(target_user, group_obj, group_key_bytes, target_user_key)
+        for file in target_user.file_keys.keys():
+            file_key_hex = target_user.file_keys.get(file)
+            if file_key_hex is None:
+                continue
+            file_key = bytes.fromhex(file_key_hex)
+            file_obj = File.get_file(Path(file), file_key)
+            if file_obj and file_obj.permission == Permission.GROUP:
+                add_file_to_group(group_obj, group_key_bytes, file_obj, file_key)
+        group_obj.save(group_key_bytes)
         add_group_to_user(target_user, group_obj, group_key_bytes, target_user_key)
 
         print(f"Success: {username} added to {group_name}.")
