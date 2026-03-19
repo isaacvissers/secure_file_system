@@ -91,7 +91,7 @@ def _get_env_value(lines: list[str], key: str) -> str | None:
 
 
 def _write_setup_values_to_env(username: str) -> tuple[Path, str]:
-    env_path = SRC_DIR.parent / ".env"
+    env_path = STORAGE_DIR / ".env"
 
     if env_path.exists():
         lines = env_path.read_text(encoding="utf-8").splitlines()
