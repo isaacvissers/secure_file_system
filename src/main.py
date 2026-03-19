@@ -745,6 +745,9 @@ class SecureFS(cmd.Cmd):
 
     @requires_admin
     def do_add_user_to_group(self, arg):
+        """
+        Usage: add_user_to_group
+        """
         group_name = prompt_required_text("group name")
         username = prompt_required_text("username")
         if not group_name or not username:
@@ -819,6 +822,9 @@ class SecureFS(cmd.Cmd):
             )
 
     def do_exit(self, arg):
+        """
+        Usage: exit
+        """
         return True
 
 
