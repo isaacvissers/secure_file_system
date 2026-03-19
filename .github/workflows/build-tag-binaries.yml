@@ -45,8 +45,26 @@ jobs:
         run: |
           pyinstaller --onefile --name secure-fs-admin-setup --paths src src/scripts/setup.py
 
-      - name: Package release binaries (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Package release binaries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p release-assets
+          cp dist/secure-fs release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.bin
+          cp dist/secure-fs-admin-setup release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.bin
+          chmod +x release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.bin release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.bin
+
+          printf '#!/usr/bin/env bash\nSCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"\nexec "$SCRIPT_DIR/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.bin" "$@"\n' > release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}
+
+          printf '#!/usr/bin/env bash\nSCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"\nexec "$SCRIPT_DIR/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.bin" "$@"\n' > release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}
+
+          chmod +x release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }} release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}
+
+          tar -C release-assets -czf release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.tar.gz secure-fs-${{ matrix.platform }}-${{ github.ref_name }} secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.bin
+          tar -C release-assets -czf release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.tar.gz secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }} secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.bin
+          rm -f release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }} release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}.bin release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }} release-assets/secure-fs-admin-setup-${{ matrix.platform }}-${{ github.ref_name }}.bin
+
+      - name: Package release binaries (macOS)
+        if: runner.os == 'macOS'
         run: |
           mkdir -p release-assets
           cp dist/secure-fs release-assets/secure-fs-${{ matrix.platform }}-${{ github.ref_name }}
