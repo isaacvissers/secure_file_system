@@ -1,6 +1,7 @@
 import os
 
 from dotenv import load_dotenv
+
 from backend.storage_paths import get_storage_dir
 
 STORAGE_DIR = get_storage_dir()
