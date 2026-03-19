@@ -1,11 +1,9 @@
 import os
-from pathlib import Path
 
 from dotenv import load_dotenv
+from backend.storage_paths import get_storage_dir
 
-SRC_DIR = Path(__file__).resolve().parents[1]
-STORAGE_DIR = SRC_DIR / "storage"
-STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+STORAGE_DIR = get_storage_dir()
 
 # Allow tests to disable dotenv override behavior for deterministic fixtures.
 DOTENV_OVERRIDE = os.getenv("SFS_DOTENV_OVERRIDE", "1") == "1"
