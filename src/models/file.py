@@ -95,11 +95,45 @@ class File:
     def rename_file(self, user: User, new_name: str) -> None:
         """Rename the file on disk to <new_name> and change File instance to use updated name and path."""
         # TODO we need to handle the case with directories afterwards
-        File.create(self.path.parent, new_name, user, self.body, self.permission)
+        new_file = File.create(
+            self.path.parent, new_name, user, self.body, self.permission
+        )
 
         # delete the old file
-        # TODO need to remove the file completely, which will require accessing user and groups
         self.path.unlink()
+        if self.permission == Permission.GROUP:
+            file_key = new_file.encrypted_file_key
+            for group_name, group_info in user.group_keys.items():
+
+                if group_name.lower() == "all":
+                    continue
+
+                group_key = bytes.fromhex(group_info["key"])
+                group_id = group_info["id"]
+
+                from backend.file_utils import add_file_to_group
+                from models.group import Group
+
+                group_obj = Group.get_group(Path(group_id), group_key)
+
+                if group_obj:
+                    add_file_to_group(group_obj, group_key, new_file, file_key)
+                else:
+                    print(f"Error: Could not access group record for {group_name}")
+        if self.permission == Permission.ALL:
+            file_key = new_file.encrypted_file_key
+            for group_name, group_info in user.group_keys.items():
+                if group_name.lower() == "all":
+                    group_key = bytes.fromhex(group_info["key"])
+                    group_id = group_info["id"]
+                    from backend.file_utils import add_file_to_group
+                    from models.group import Group
+
+                    group_obj = Group.get_group(Path(group_id), group_key)
+                    if group_obj:
+                        add_file_to_group(group_obj, group_key, new_file, file_key)
+                    else:
+                        print(f"Error: Could not access group record for {group_name}")
 
     def to_json(self) -> str:
         """Convert the File instance to a JSON string."""
