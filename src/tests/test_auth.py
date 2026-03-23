@@ -2,12 +2,13 @@ import json
 from pathlib import Path
 
 import backend.auth as auth
+from backend.constants import SALT
 from models.user import AdminUser, User
 
 
 def test_create_user_key_and_admin_key():
-    assert auth.create_user_key("alice", "pw") == "alice_pw_psalt"
-    assert auth.get_admin_key() == "admin_admin_psalt"
+    assert auth.create_user_key("alice", "pw") == f"alice_pw_{SALT}"
+    assert auth.get_admin_key() == f"admin_admin_{SALT}"
 
 
 def test_requires_login_blocks_when_logged_out(capsys):
