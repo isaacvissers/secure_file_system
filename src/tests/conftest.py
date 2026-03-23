@@ -2,10 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("SFS_DOTENV_OVERRIDE", "0")
-os.environ.setdefault("SALT", "psalt")
-os.environ.setdefault("ADMIN", "admin")
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = str(PROJECT_ROOT / "src")
 if SRC_DIR not in sys.path:
