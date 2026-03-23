@@ -70,7 +70,7 @@ def requires_logged_out(func):
 
 def create_user_key(username: str, password: str) -> str:
     """Generate a user key. Replace with proper encryption later."""
-    salt = os.getenv("SALT", SALT)
+    salt = SALT
     return f"{username}_{password}_{salt}"
 
 

@@ -72,44 +72,6 @@ def _admin_user_path(username: str) -> Path:
     return users_dir / encrypted_name
 
 
-def _upsert_env_value(lines: list[str], key: str, value: str) -> list[str]:
-    new_line = f"{key}={value}"
-    for idx, line in enumerate(lines):
-        if line.startswith(f"{key}="):
-            lines[idx] = new_line
-            return lines
-    lines.append(new_line)
-    return lines
-
-
-def _get_env_value(lines: list[str], key: str) -> str | None:
-    prefix = f"{key}="
-    for line in lines:
-        if line.startswith(prefix):
-            return line[len(prefix) :]
-    return None
-
-
-def _write_setup_values_to_env(username: str) -> tuple[Path, str]:
-    env_path = STORAGE_DIR / ".env"
-
-    if env_path.exists():
-        lines = env_path.read_text(encoding="utf-8").splitlines()
-    else:
-        lines = []
-
-    existing_salt = _get_env_value(lines, "SALT")
-    salt = existing_salt if existing_salt else os.urandom(16).hex()
-
-    lines = _upsert_env_value(lines, "ADMIN", username)
-    lines = _upsert_env_value(lines, "SALT", salt)
-
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    os.environ["ADMIN"] = username
-    os.environ["SALT"] = salt
-    return env_path, salt
-
-
 def ensure_admin_user(username: str) -> bool:
     """Verify whether the admin record exists on disk."""
     admin_path = _admin_user_path(username)
@@ -149,8 +111,7 @@ def main() -> None:
     if not clear_storage(yes=True):
         return
 
-    username = _parse_username(args.username)
-    env_path, salt = _write_setup_values_to_env(username)
+    username = "admin"
 
     admin_user, admin_key = AdminUser.create(username, username)
     if ensure_admin_user(username):

@@ -98,11 +98,11 @@ def test_admin_login_uses_admin_loader(monkeypatch, capsys, tmp_path):
     admin_path = _user_record_path(tmp_path, "admin")
     admin = AdminUser(
         username="admin",
-        auth_salt="testsalt",
-        auth_verifier=hashlib.sha256(f"admintestsalt".encode("utf-8")).hexdigest(),
+        auth_salt="default_salt",
+        auth_verifier=hashlib.sha256(f"admindefault_salt".encode("utf-8")).hexdigest(),
         path=admin_path,
     )
-    admin_key = hashlib.sha256("admin_admin_psalt".encode("utf-8")).digest()
+    admin_key = hashlib.sha256("admin_admin_default_salt".encode("utf-8")).digest()
     admin._encryption_key = admin_key
     admin.save(admin_key)
     Directory.create(main_module.FILES_DIR, "admin", admin)
