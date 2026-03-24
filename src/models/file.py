@@ -92,6 +92,9 @@ class File:
             path=Path(data["path"]),
         )
 
+    def delete_file(self) -> None:
+        self.path.unlink()
+
     def rename_file(self, user: User, new_name: str) -> None:
         """Rename the file on disk to <new_name> and change File instance to use updated name and path."""
         # TODO we need to handle the case with directories afterwards

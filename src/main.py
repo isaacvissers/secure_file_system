@@ -491,6 +491,37 @@ class SecureFS(cmd.Cmd):
             print(f"Error writing to file: {e}")
 
     @requires_login
+    def do_rm(self, arg):
+        """
+        Usage: rm <file_name>
+        """
+        tokens = shlex.split(arg)
+        if len(tokens) != 1:
+            print("Error: Invalid syntax. Usage: rm <filename>")
+            return
+
+        if not self.current_working_directory.is_relative_to(
+            FILES_DIR
+            / hashlib.sha256(self.current_user.username.encode("utf-8")).hexdigest()
+        ):
+            print("Error: Cannot delete files outside of your home directory.")
+            return
+        file_name = tokens[0]
+
+        file_path = (
+            self.current_working_directory
+            / hashlib.sha256(file_name.encode("utf-8")).hexdigest()
+        )
+        if not file_path.is_file():
+            print(f"Error: Source file '{file_name}' does not exist.")
+            return
+        file_key = bytes.fromhex(self.current_user.file_keys.get(str(file_path)))
+        file = File.get_file(file_path, file_key)
+        remove_file_tracking_for_user(self.current_user, file_path)
+        file.delete_file()
+        self._refresh_current_user()
+
+    @requires_login
     def do_mv(self, arg):
         """
         Usage: mv <source> <destination>
