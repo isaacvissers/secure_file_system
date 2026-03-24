@@ -65,6 +65,9 @@ If a user wants to use our file system they need to go to github releases for ou
             - Rename <file_name> to <new_name>
             - We only support renaming files, not directories
             - We only support renaming files you are the owner of (within your home directory)
+        - rm <file_name>
+          - Deletes the file <file_name> from the file system
+          - Only supported for files you are the owner of (within your home directory)
         - pwd
           - Prints the current working directory
         - set_permissions <name> <permission>
